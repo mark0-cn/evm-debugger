@@ -36,8 +36,7 @@ impl DebugSession {
 
     /// Block until the EVM thread sends all snapshots (called once, from spawn_blocking).
     pub fn wait_for_snapshots(&self) -> SessionState {
-        let guard = self.snap_rx.lock().unwrap();
-        let rx = match guard.as_ref() {
+        let rx = match self.snap_rx.lock().unwrap().take() {
             Some(r) => r,
             None => {
                 return SessionState::Error {
@@ -88,7 +87,11 @@ impl DebugSession {
     pub fn step_into(&self) -> SessionState {
         let mut data = self.data.lock().unwrap();
         match &mut *data {
-            SessionData::Ready { snapshots, current_index, result } => {
+            SessionData::Ready {
+                snapshots,
+                current_index,
+                result,
+            } => {
                 *current_index = (*current_index + 1).min(snapshots.len());
                 Self::state_at(snapshots, *current_index, result)
             }
@@ -100,8 +103,16 @@ impl DebugSession {
     pub fn step_over(&self) -> SessionState {
         let mut data = self.data.lock().unwrap();
         match &mut *data {
-            SessionData::Ready { snapshots, current_index, result } => {
-                tracing::debug!("[session.step_over] current_index={}, snapshots.len()={}", current_index, snapshots.len());
+            SessionData::Ready {
+                snapshots,
+                current_index,
+                result,
+            } => {
+                tracing::debug!(
+                    "[session.step_over] current_index={}, snapshots.len()={}",
+                    current_index,
+                    snapshots.len()
+                );
                 if *current_index >= snapshots.len() {
                     tracing::debug!("[session.step_over] already at end, returning state_at");
                     return Self::state_at(snapshots, *current_index, result);
@@ -125,7 +136,11 @@ impl DebugSession {
     pub fn continue_exec(&self) -> SessionState {
         let mut data = self.data.lock().unwrap();
         match &mut *data {
-            SessionData::Ready { snapshots, current_index, result } => {
+            SessionData::Ready {
+                snapshots,
+                current_index,
+                result,
+            } => {
                 *current_index = snapshots.len();
                 Self::state_at(snapshots, *current_index, result)
             }
@@ -170,7 +185,9 @@ impl DebugSession {
         result: &Option<ExecutionResultInfo>,
     ) -> SessionState {
         if index < snapshots.len() {
-            SessionState::Paused { snapshot: snapshots[index].clone() }
+            SessionState::Paused {
+                snapshot: snapshots[index].clone(),
+            }
         } else {
             match result {
                 Some(r) => SessionState::Finished { result: r.clone() },
@@ -182,11 +199,15 @@ impl DebugSession {
     fn current_state_locked(&self, data: &SessionData) -> SessionState {
         match data {
             SessionData::Loading => SessionState::Loading,
-            SessionData::Ready { snapshots, current_index, result } => {
-                Self::state_at(snapshots, *current_index, result)
-            }
+            SessionData::Ready {
+                snapshots,
+                current_index,
+                result,
+            } => Self::state_at(snapshots, *current_index, result),
             SessionData::Aborted => SessionState::Aborted,
-            SessionData::Error(msg) => SessionState::Error { message: msg.clone() },
+            SessionData::Error(msg) => SessionState::Error {
+                message: msg.clone(),
+            },
         }
     }
 }
