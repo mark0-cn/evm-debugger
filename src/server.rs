@@ -33,6 +33,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(serve_index))
         .route("/api/session", post(create_session))
+        .route("/api/session/:id", get(get_session))
         .route("/api/session/:id/step_into", post(step_into))
         .route("/api/session/:id/step_over", post(step_over))
         .route("/api/session/:id/continue", post(continue_exec))
