@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVM Debugger</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Consolas', 'Monaco', monospace; background: #1e1e1e; color: #d4d4d4; height: 100vh; display: flex; flex-direction: column; }
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #2d2d2d; border-bottom: 1px solid #3d3d3d; flex-shrink: 0; }
+  .toolbar h1 { font-size: 14px; font-weight: bold; color: #569cd6; margin-right: 10px; }
+  .toolbar input { background: #3c3c3c; border: 1px solid #555; color: #d4d4d4; padding: 4px 8px; font-family: inherit; font-size: 12px; border-radius: 3px; }
+  #txInput { width: 340px; }
+  #rpcInput { width: 280px; }
+  .btn { padding: 4px 12px; border: none; border-radius: 3px; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: bold; }
+  .btn-primary { background: #0e639c; color: #fff; }
+  .btn-primary:hover { background: #1177bb; }
+  .btn-green { background: #4caf50; color: #fff; }
+  .btn-green:hover { background: #66bb6a; }
+  .btn-blue { background: #2196f3; color: #fff; }
+  .btn-blue:hover { background: #42a5f5; }
+  .btn-orange { background: #ff9800; color: #fff; }
+  .btn-orange:hover { background: #ffa726; }
+  .btn-red { background: #f44336; color: #fff; }
+  .btn-red:hover { background: #ef5350; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status-bar { padding: 4px 12px; background: #007acc; color: #fff; font-size: 11px; display: flex; gap: 20px; flex-shrink: 0; }
+  .main-grid { display: grid; grid-template-columns: 220px 1fr 220px; grid-template-rows: 1fr auto; flex: 1; overflow: hidden; gap: 1px; background: #3d3d3d; }
+  .panel { background: #1e1e1e; overflow: auto; display: flex; flex-direction: column; }
+  .panel-header { padding: 6px 10px; font-size: 11px; font-weight: bold; color: #888; background: #252526; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; border-bottom: 1px solid #3d3d3d; }
+  .panel-content { padding: 8px; flex: 1; overflow: auto; font-size: 12px; }
+  .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #3d3d3d; height: 180px; grid-column: 1 / -1; }
+  .opcode-list { font-size: 12px; }
+  .opcode-row { padding: 2px 6px; display: flex; gap: 10px; cursor: pointer; border-radius: 2px; }
+  .opcode-row:hover { background: #2a2d2e; }
+  .opcode-row.current { background: #094771; color: #fff; }
+  .opcode-row .op-pc { color: #888; width: 50px; flex-shrink: 0; }
+  .opcode-row .op-name { color: #9cdcfe; font-weight: bold; width: 120px; }
+  .stack-item { padding: 2px 6px; font-size: 11px; color: #9cdcfe; border-bottom: 1px solid #2d2d2d; }
+  .stack-item .idx { color: #888; width: 28px; display: inline-block; }
+  .memory-row { font-size: 11px; color: #ce9178; margin-bottom: 2px; }
+  .memory-row .offset { color: #888; margin-right: 8px; }
+  .callframe { padding: 3px 6px; font-size: 11px; border-left: 2px solid #569cd6; margin-bottom: 4px; }
+  .callframe .cf-depth { color: #888; font-size: 10px; }
+  .callframe .cf-addr { color: #4ec9b0; }
+  .callframe .cf-kind { color: #c586c0; font-size: 10px; }
+  .log-item { padding: 4px 6px; border-left: 2px solid #dcdcaa; margin-bottom: 4px; font-size: 11px; }
+  .storage-item { padding: 2px 6px; font-size: 11px; border-bottom: 1px solid #2d2d2d; }
+  .storage-item .s-key { color: #569cd6; }
+  .storage-item .s-val { color: #4ec9b0; }
+  .loading { color: #888; text-align: center; padding: 20px; }
+  #sessionId { display: none; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>⚡ EVM Debugger</h1>
+  <input id="txInput" type="text" placeholder="0x transaction hash..." />
+  <input id="rpcInput" type="text" placeholder="RPC URL" value="https://eth.llamarpc.com" />
+  <button class="btn btn-primary" onclick="loadTx()">Load (Enter)</button>
+  <span style="width:1px;background:#555;height:20px;display:inline-block;margin:0 4px"></span>
+  <button class="btn btn-green" id="btnStepInto" onclick="stepInto()" disabled title="F11">Step Into (F11)</button>
+  <button class="btn btn-blue" id="btnStepOver" onclick="stepOver()" disabled title="F10">Step Over (F10)</button>
+  <button class="btn btn-orange" id="btnContinue" onclick="continueExec()" disabled title="F5">Continue (F5)</button>
+  <button class="btn btn-red" id="btnAbort" onclick="abortSession()" disabled>Abort</button>
+  <span id="sessionId"></span>
+  <span id="statusMsg" style="color:#888;font-size:12px;margin-left:8px"></span>
+</div>
+
+<div class="status-bar" id="statusBar">
+  <span id="sStep">Step: -</span>
+  <span id="sGasUsed">Gas Used: -</span>
+  <span id="sGasLeft">Gas Left: -</span>
+  <span id="sDepth">Depth: -</span>
+  <span id="sPc">PC: -</span>
+  <span id="sOp">Op: -</span>
+  <span id="sContract">Contract: -</span>
+</div>
+
+<div class="main-grid">
+  <!-- Left: Call Stack -->
+  <div class="panel">
+    <div class="panel-header">Call Stack</div>
+    <div class="panel-content" id="callStackPanel"><p class="loading">—</p></div>
+  </div>
+
+  <!-- Center: Opcodes -->
+  <div class="panel">
+    <div class="panel-header">Bytecode / Opcodes</div>
+    <div class="panel-content" id="opcodePanel"><p class="loading">Load a transaction to begin debugging.</p></div>
+  </div>
+
+  <!-- Right: Stack + Memory -->
+  <div class="panel" style="display:flex;flex-direction:column">
+    <div style="flex:1;overflow:auto;display:flex;flex-direction:column">
+      <div class="panel-header">Stack</div>
+      <div class="panel-content" id="stackPanel" style="flex:1"><p class="loading">—</p></div>
+    </div>
+    <div style="flex:1;overflow:auto;display:flex;flex-direction:column;border-top:1px solid #3d3d3d">
+      <div class="panel-header">Memory</div>
+      <div class="panel-content" id="memoryPanel" style="flex:1"><p class="loading">—</p></div>
+    </div>
+  </div>
+
+  <!-- Bottom row -->
+  <div class="bottom-grid">
+    <div class="panel">
+      <div class="panel-header">Storage Changes</div>
+      <div class="panel-content" id="storagePanel"><p class="loading">—</p></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header">Logs</div>
+      <div class="panel-content" id="logsPanel"><p class="loading">—</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentSessionId = null;
+let allTraceSteps = []; // full opcode list from server [{step, pc, opcode, opcode_name}]
+
+function setStatus(msg) {
+  document.getElementById('statusMsg').textContent = msg;
+}
+
+function setButtonsEnabled(enabled) {
+  ['btnStepInto','btnStepOver','btnContinue','btnAbort'].forEach(id => {
+    document.getElementById(id).disabled = !enabled;
+  });
+}
+
+async function loadTx() {
+  const txHash = document.getElementById('txInput').value.trim();
+  const rpcUrl = document.getElementById('rpcInput').value.trim();
+  if (!txHash) { alert('Enter a transaction hash'); return; }
+  if (!rpcUrl) { alert('Enter an RPC URL'); return; }
+
+  setStatus('Loading (running full trace)...');
+  setButtonsEnabled(false);
+  allTraceSteps = [];
+  renderOpcodeList([], -1);
+  document.getElementById('callStackPanel').innerHTML = '<p class="loading">Loading...</p>';
+
+  try {
+    const resp = await fetch('/api/session', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ tx_hash: txHash, rpc_url: rpcUrl })
+    });
+    const data = await resp.json();
+    if (data.error) { setStatus('Error: ' + data.error); return; }
+    currentSessionId = data.session_id;
+    document.getElementById('sessionId').textContent = 'Session: ' + currentSessionId.slice(0,8);
+    // Populate the full opcode list immediately from the pre-collected trace.
+    allTraceSteps = data.trace_steps || [];
+    setStatus('');
+    processState(data.state);
+  } catch(e) {
+    setStatus('Error: ' + e.message);
+  }
+}
+
+function processState(state) {
+  if (!state) return;
+
+  if (state.status === 'paused') {
+    setButtonsEnabled(true);
+    const snap = state.snapshot;
+    updateStatusBar(snap);
+    // Highlight current step in the pre-loaded full trace list.
+    renderOpcodeList(allTraceSteps, snap.step_number);
+    renderStack(snap.stack);
+    renderMemory(snap.memory_hex);
+    renderCallStack(snap.call_stack);
+    renderStorage(snap.storage_changes);
+    renderLogs(snap.logs);
+    setStatus('');
+  } else if (state.status === 'finished') {
+    setButtonsEnabled(false);
+    const r = state.result;
+    setStatus((r.success ? '✓ Success' : '✗ ' + r.reason) + ' | Gas: ' + r.gas_used);
+    renderOpcodeList(allTraceSteps, -1);
+  } else if (state.status === 'error') {
+    setButtonsEnabled(false);
+    let msg = state.message || 'Unknown error';
+    if (msg.includes('429') || msg.includes('rate') || msg.includes('1015')) {
+      msg = 'RPC rate limited (429). Try a paid RPC (Alchemy/Infura/QuickNode) or wait and retry.';
+    } else if (msg.includes('LackOfFund') || msg.includes('InsufficientFunds')) {
+      msg = 'Insufficient balance at block N-1 (sender\'s ETH was spent by earlier txs in the same block).';
+    }
+    setStatus('Error: ' + msg);
+  } else if (state.status === 'aborted') {
+    setButtonsEnabled(false);
+    setStatus('Aborted');
+  }
+}
+
+function updateStatusBar(snap) {
+  document.getElementById('sStep').textContent = 'Step: ' + snap.step_number;
+  document.getElementById('sGasUsed').textContent = 'Gas Used: ' + snap.gas_used;
+  document.getElementById('sGasLeft').textContent = 'Gas Left: ' + snap.gas_remaining;
+  document.getElementById('sDepth').textContent = 'Depth: ' + snap.call_depth;
+  document.getElementById('sPc').textContent = 'PC: 0x' + snap.pc.toString(16);
+  document.getElementById('sOp').textContent = 'Op: ' + snap.opcode_name;
+  document.getElementById('sContract').textContent = 'Contract: ' + snap.contract_address.slice(0, 10) + '...';
+}
+
+function renderOpcodeList(steps, currentStep) {
+  const panel = document.getElementById('opcodePanel');
+  if (steps.length === 0) {
+    panel.innerHTML = '<p class="loading">Waiting for first step...</p>';
+    return;
+  }
+  const html = steps.map((h, i) => {
+    const isCurrent = (h.step === currentStep);
+    return `<div class="opcode-row${isCurrent ? ' current' : ''}" id="oprow_${i}">
+      <span class="op-pc">${('000000'+h.step).slice(-6)}</span>
+      <span class="op-pc">0x${h.pc.toString(16).padStart(4,'0')}</span>
+      <span class="op-name">${h.opcode_name}</span>
+    </div>`;
+  }).join('');
+  panel.innerHTML = `<div class="opcode-list">${html}</div>`;
+  // Scroll to the highlighted row.
+  if (currentStep >= 0) {
+    const idx = steps.findIndex(h => h.step === currentStep);
+    if (idx >= 0) {
+      const cur = document.getElementById('oprow_' + idx);
+      if (cur) cur.scrollIntoView({block: 'center', behavior: 'smooth'});
+    }
+  }
+}
+
+function renderStack(stack) {
+  const panel = document.getElementById('stackPanel');
+  if (!stack || stack.length === 0) {
+    panel.innerHTML = '<p class="loading">(empty)</p>';
+    return;
+  }
+  panel.innerHTML = stack.map((v, i) =>
+    `<div class="stack-item"><span class="idx">[${i}]</span> ${v}</div>`
+  ).join('');
+}
+
+function renderMemory(hexStr) {
+  const panel = document.getElementById('memoryPanel');
+  if (!hexStr || hexStr.length === 0) {
+    panel.innerHTML = '<p class="loading">(empty)</p>';
+    return;
+  }
+  const bytes = hexStr.match(/.{1,2}/g) || [];
+  let rows = '';
+  for (let i = 0; i < bytes.length; i += 32) {
+    const offset = '0x' + i.toString(16).padStart(4, '0');
+    const chunk = bytes.slice(i, i + 32).join(' ');
+    rows += `<div class="memory-row"><span class="offset">${offset}</span>${chunk}</div>`;
+  }
+  panel.innerHTML = rows;
+}
+
+function renderCallStack(callStack) {
+  const panel = document.getElementById('callStackPanel');
+  if (!callStack || callStack.length === 0) {
+    panel.innerHTML = '<p class="loading">(none)</p>';
+    return;
+  }
+  panel.innerHTML = callStack.map(f =>
+    `<div class="callframe">
+      <div class="cf-kind">[${f.depth}] ${f.kind}</div>
+      <div class="cf-addr">${f.contract}</div>
+      <div style="color:#888;font-size:10px">from: ${f.caller.slice(0,10)}...</div>
+    </div>`
+  ).join('');
+}
+
+function renderStorage(storageChanges) {
+  const panel = document.getElementById('storagePanel');
+  if (!storageChanges || Object.keys(storageChanges).length === 0) {
+    panel.innerHTML = '<p class="loading">(none)</p>';
+    return;
+  }
+  let html = '';
+  for (const [addr, slots] of Object.entries(storageChanges)) {
+    html += `<div style="color:#888;font-size:10px;margin:4px 0 2px">${addr}</div>`;
+    for (const [key, val] of Object.entries(slots)) {
+      html += `<div class="storage-item"><span class="s-key">${key.slice(0,18)}…</span> → <span class="s-val">${val.slice(0,18)}…</span></div>`;
+    }
+  }
+  panel.innerHTML = html;
+}
+
+function renderLogs(logs) {
+  const panel = document.getElementById('logsPanel');
+  if (!logs || logs.length === 0) {
+    panel.innerHTML = '<p class="loading">(none)</p>';
+    return;
+  }
+  panel.innerHTML = logs.map(l =>
+    `<div class="log-item">
+      <div style="color:#dcdcaa">${l.contract}</div>
+      ${l.topics.map((t,i) => `<div style="color:#888;font-size:10px">topic${i}: ${t.slice(0,20)}…</div>`).join('')}
+      <div style="color:#ce9178;font-size:10px">data: ${l.data.slice(0,30)}${l.data.length>30?'…':''}</div>
+    </div>`
+  ).join('');
+}
+
+async function stepInto() { await sendCmd('step_into'); }
+async function stepOver() { await sendCmd('step_over'); }
+async function continueExec() {
+  setButtonsEnabled(false);
+  setStatus('Running to completion...');
+  await sendCmd('continue');
+}
+async function abortSession() {
+  if (!currentSessionId) return;
+  setButtonsEnabled(false);
+  setStatus('Aborting...');
+  try {
+    await fetch(`/api/session/${currentSessionId}/abort`, { method: 'POST' });
+  } catch(e) { /* ignore network errors on abort */ }
+  setStatus('Aborted');
+}
+
+async function sendCmd(cmd) {
+  if (!currentSessionId) return;
+  setButtonsEnabled(false);
+  try {
+    const resp = await fetch(`/api/session/${currentSessionId}/${cmd}`, { method: 'POST' });
+    const text = await resp.text();
+    console.log(`[DEBUG sendCmd] cmd=${cmd} status=${resp.status} content-type=${resp.headers.get('content-type')} body=${JSON.stringify(text)}`);
+    if (!text) {
+      setStatus(`Error: empty response (HTTP ${resp.status})`);
+      setButtonsEnabled(true);
+      return;
+    }
+    let data;
+    try { data = JSON.parse(text); } catch(parseErr) {
+      setStatus(`Error: invalid JSON (HTTP ${resp.status}): ${text.slice(0, 80)}`);
+      setButtonsEnabled(true);
+      return;
+    }
+    if (data.error) { setStatus('Error: ' + data.error); setButtonsEnabled(true); return; }
+    processState(data);
+  } catch(e) {
+    setStatus('Error: ' + e.message);
+    setButtonsEnabled(true);
+  }
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (!currentSessionId) return;
+  if (e.key === 'F11') { e.preventDefault(); stepInto(); }
+  else if (e.key === 'F10') { e.preventDefault(); stepOver(); }
+  else if (e.key === 'F5') { e.preventDefault(); continueExec(); }
+  else if (e.key === 'Enter' && document.activeElement === document.getElementById('txInput')) {
+    loadTx();
+  }
+});
+document.getElementById('txInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') loadTx();
+});
+</script>
+</body>
+</html>

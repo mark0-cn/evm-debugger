@@ -1,0 +1,39 @@
+[package]
+name = "evm-debugger"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "evm-debugger"
+path = "src/main.rs"
+
+[dependencies]
+# revm local path dependencies
+revm             = { path = "../revm/crates/revm", features = ["std", "serde", "optional_balance_check"] }
+revm-database    = { path = "../revm/crates/database", features = ["std", "alloydb"] }
+revm-inspector   = { path = "../revm/crates/inspector", features = ["std"] }
+revm-context     = { path = "../revm/crates/context", features = ["std", "serde"] }
+
+# RPC - match versions used by revm workspace
+alloy-provider   = { version = "1.4.2", features = ["reqwest"] }
+alloy-rpc-client = { version = "1.4.2", features = ["reqwest"] }
+alloy-transport  = { version = "1.4.2" }
+alloy-eips       = { version = "1.4.2" }
+alloy-primitives = { version = "1.5.2", features = ["serde"] }
+alloy-consensus  = { version = "1.4.2" }
+url              = "2"
+
+# HTTP
+axum             = { version = "0.7", features = ["json"] }
+tower-http       = { version = "0.5", features = ["cors", "trace"] }
+tokio            = { version = "1", features = ["full"] }
+
+# Utilities
+serde            = { version = "1", features = ["derive"] }
+serde_json       = "1"
+anyhow           = "1"
+dashmap          = "6"
+uuid             = { version = "1", features = ["v4"] }
+hex              = "0.4"
+tracing          = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
