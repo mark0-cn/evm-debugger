@@ -166,20 +166,25 @@ pub fn spawn_evm_thread(
             Ok(r) => {
                 use revm::context::result::ExecutionResult;
                 let (success, gas_used, output, reason) = match r {
-                    ExecutionResult::Success { gas, output, reason, .. } => (
+                    ExecutionResult::Success {
+                        gas_used,
+                        output,
+                        reason,
+                        ..
+                    } => (
                         true,
-                        gas.used(),
+                        gas_used,
                         format!("0x{}", hex::encode(output.data())),
                         format!("{:?}", reason),
                     ),
-                    ExecutionResult::Revert { gas, output, .. } => (
+                    ExecutionResult::Revert { gas_used, output, .. } => (
                         false,
-                        gas.used(),
+                        gas_used,
                         format!("0x{}", hex::encode(output.as_ref())),
                         "Revert".to_string(),
                     ),
-                    ExecutionResult::Halt { gas, reason, .. } => {
-                        (false, gas.used(), String::new(), format!("{:?}", reason))
+                    ExecutionResult::Halt { gas_used, reason, .. } => {
+                        (false, gas_used, String::new(), format!("{:?}", reason))
                     }
                 };
                 Some(ExecutionResultInfo { success, gas_used, output, reason })

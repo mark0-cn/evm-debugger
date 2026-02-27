@@ -8,11 +8,10 @@ name = "evm-debugger"
 path = "src/main.rs"
 
 [dependencies]
-# revm local path dependencies
-revm             = { path = "../revm/crates/revm", features = ["std", "serde", "optional_balance_check"] }
-revm-database    = { path = "../revm/crates/database", features = ["std", "alloydb"] }
-revm-inspector   = { path = "../revm/crates/inspector", features = ["std"] }
-revm-context     = { path = "../revm/crates/context", features = ["std", "serde"] }
+revm             = { version = "34.0.0", features = ["std", "serde", "optional_balance_check"] }
+revm-database    = { version = "10.0.0", features = ["std", "alloydb"] }
+revm-inspector   = { version = "15.0.0", features = ["std"] }
+revm-context     = { version = "13.0.0", features = ["std", "serde"] }
 
 # RPC - match versions used by revm workspace
 alloy-provider   = { version = "1.4.2", features = ["reqwest"] }

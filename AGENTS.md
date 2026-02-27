@@ -20,7 +20,7 @@ cargo run --release
 
 ## 前置条件
 
-- 本项目通过 path 依赖引用本地 `revm` workspace 下的具体 crates；需要在本仓库相邻路径存在 `../revm/crates/*`。
+- 本项目通过 crates.io 依赖使用 `revm` 相关 crates。
 - `cache/` 为本地交易缓存目录；已在 `.gitignore` 中忽略。
 
 ## 目录结构与职责
