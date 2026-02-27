@@ -138,7 +138,6 @@ async fn step_into(Path(id): Path<String>, State(state): State<AppState>) -> imp
 }
 
 async fn step_over(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
-    tracing::debug!("[step_over] called for session {}", id);
     let session = match state.sessions.get(&id) {
         Some(s) => s.value().clone(),
         None => {
@@ -150,24 +149,8 @@ async fn step_over(Path(id): Path<String>, State(state): State<AppState>) -> imp
                 .into_response();
         }
     };
-    tracing::debug!("[step_over] session found, calling spawn_blocking");
-    let result = tokio::task::spawn_blocking(move || {
-        tracing::debug!("[step_over] inside spawn_blocking, calling session.step_over()");
-        let s = session.step_over();
-        tracing::debug!("[step_over] session.step_over() returned: {:?}", s);
-        s
-    })
-    .await;
-    tracing::debug!(
-        "[step_over] spawn_blocking completed: is_ok={}",
-        result.is_ok()
-    );
-    match result {
-        Ok(s) => {
-            let json_result = serde_json::to_string(&s);
-            tracing::debug!("[step_over] serialized ok={}", json_result.is_ok());
-            Json(s).into_response()
-        }
+    match tokio::task::spawn_blocking(move || session.step_over()).await {
+        Ok(s) => Json(s).into_response(),
         Err(e) => {
             tracing::error!("[step_over] spawn_blocking error (panic?): {}", e);
             (

@@ -108,24 +108,16 @@ impl DebugSession {
                 current_index,
                 result,
             } => {
-                tracing::debug!(
-                    "[session.step_over] current_index={}, snapshots.len()={}",
-                    current_index,
-                    snapshots.len()
-                );
                 if *current_index >= snapshots.len() {
-                    tracing::debug!("[session.step_over] already at end, returning state_at");
                     return Self::state_at(snapshots, *current_index, result);
                 }
                 let target_depth = snapshots[*current_index].call_depth;
-                tracing::debug!("[session.step_over] target_depth={}", target_depth);
                 *current_index += 1;
                 while *current_index < snapshots.len()
                     && snapshots[*current_index].call_depth > target_depth
                 {
                     *current_index += 1;
                 }
-                tracing::debug!("[session.step_over] new current_index={}", current_index);
                 Self::state_at(snapshots, *current_index, result)
             }
             _ => self.current_state_locked(&data),

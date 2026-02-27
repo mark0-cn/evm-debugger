@@ -327,7 +327,6 @@ async function sendCmd(cmd) {
   try {
     const resp = await fetch(`/api/session/${currentSessionId}/${cmd}`, { method: 'POST' });
     const text = await resp.text();
-    console.log(`[DEBUG sendCmd] cmd=${cmd} status=${resp.status} content-type=${resp.headers.get('content-type')} body=${JSON.stringify(text)}`);
     if (!text) {
       setStatus(`Error: empty response (HTTP ${resp.status})`);
       setButtonsEnabled(true);
