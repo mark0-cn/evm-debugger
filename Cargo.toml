@@ -2,11 +2,15 @@
 name = "evm-debugger"
 version = "0.1.0"
 edition = "2021"
-default-run = "evm-debugger"
+default-run = "desktop"
 
 [[bin]]
 name = "evm-debugger"
 path = "src/main.rs"
+
+[[bin]]
+name = "desktop"
+path = "src/bin/desktop.rs"
 
 [dependencies]
 revm             = { version = "34.0.0", features = ["std", "serde", "optional_balance_check"] }
