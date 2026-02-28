@@ -1,4 +1,5 @@
 mod app_state;
+mod deps;
 mod executor;
 mod fetcher;
 mod fs_utils;
