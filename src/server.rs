@@ -76,9 +76,20 @@ async fn fallback_handler(req: Request) -> impl IntoResponse {
     )
 }
 
-async fn serve_index() -> impl IntoResponse {
-    let html = include_str!("../static/index.html");
-    axum::response::Html(html)
+async fn serve_index() -> axum::response::Response {
+    let use_app_root = std::env::var("EVM_DEBUGGER_SERVE_APP_AT_ROOT")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    if use_app_root {
+        let dist_dir =
+            std::env::var("EVM_DEBUGGER_APP_DIST_DIR").unwrap_or_else(|_| "ui/dist".to_string());
+        let path = format!("{}/index.html", dist_dir);
+        if let Ok(html) = std::fs::read_to_string(path) {
+            return axum::response::Html(html).into_response();
+        }
+    }
+
+    axum::response::Html(include_str!("../static/index.html")).into_response()
 }
 
 async fn create_session(

@@ -103,6 +103,7 @@ all_proxy=socks5://127.0.0.1:7890
 - 当前页面：`/`
 - 新页面入口（占位）：`/app`
 - 静态资源目录：默认 `ui/dist`，可用 `EVM_DEBUGGER_APP_DIST_DIR` 覆写
+- 切换开关：设置 `EVM_DEBUGGER_SERVE_APP_AT_ROOT=1` 后，`/` 将优先返回 `ui/dist/index.html`（读取失败则回退旧页面）
 
 详见 [ui/README.md](./ui/README.md)。
 
