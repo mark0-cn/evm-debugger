@@ -67,12 +67,12 @@ export EVM_DEBUGGER_CORS_ALLOW_ORIGINS=http://localhost:8080,http://127.0.0.1:80
 
 ## 代理（可选）
 
-如果你的环境需要代理访问外网 RPC，可在运行前设置环境变量：
+如果你的环境需要代理访问外网 RPC，本项目会在启动时默认读取当前目录的 `.env`（若存在），你可以把代理环境变量写进去，例如：
 
 ```bash
-export https_proxy=http://127.0.0.1:7890
-export http_proxy=http://127.0.0.1:7890
-export all_proxy=socks5://127.0.0.1:7890
+https_proxy=http://127.0.0.1:7890
+http_proxy=http://127.0.0.1:7890
+all_proxy=socks5://127.0.0.1:7890
 ```
 
 不同工具/库对大小写支持不一致，必要时可同时设置 `HTTPS_PROXY/HTTP_PROXY/ALL_PROXY`。
