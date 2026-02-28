@@ -55,7 +55,7 @@ cache/
 这意味着：
 
 - 步进是 O(1) 的内存读取（不做网络/IO）
-- 创建会话会执行完整重放（成本集中在 `POST /api/session`）
+- 创建会话会执行完整重放（成本集中在回放阶段），但 `POST /api/session` 不再阻塞等待回放完成：它会立即返回 `session_id + Loading`，前端轮询 `GET /api/session/:id` 等待就绪
 
 ## 配置与约定
 
@@ -69,6 +69,7 @@ cache/
 |--------|------|------|
 | POST | `/api/session` | 创建会话，body: `{"tx_hash","rpc_url"}` |
 | GET  | `/api/session/:id` | 获取当前会话状态 |
+| GET  | `/api/session/:id/trace_steps` | 获取全量 opcode 列表（就绪后可用） |
 | POST | `/api/session/:id/step_into` | 步入（F11） |
 | POST | `/api/session/:id/step_over` | 步过（F10） |
 | POST | `/api/session/:id/continue` | 运行到结束（F5） |
