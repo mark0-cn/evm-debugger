@@ -29,6 +29,18 @@ cargo run
 http://localhost:8080
 ```
 
+默认仅监听 `127.0.0.1:8080`。如需对外提供服务可设置：
+
+```bash
+export EVM_DEBUGGER_BIND_ADDR=0.0.0.0:8080
+```
+
+如需跨域访问（不建议对公网全放开），可设置允许的 Origin 列表：
+
+```bash
+export EVM_DEBUGGER_CORS_ALLOW_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
+```
+
 在页面顶部输入：
 
 - TX Hash：交易哈希（支持大小写与是否带 `0x`，服务端会规范化）

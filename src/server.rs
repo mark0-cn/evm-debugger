@@ -2,12 +2,13 @@ use crate::{app_state::AppState, session_service::SessionService, types::CreateS
 use axum::{
     extract::{Path, Request, State},
     http::StatusCode,
+    http::{header::CONTENT_TYPE, HeaderValue, Method},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use serde_json::json;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 fn format_anyhow_chain(e: &anyhow::Error) -> String {
@@ -20,10 +21,7 @@ fn format_anyhow_chain(e: &anyhow::Error) -> String {
 }
 
 pub fn router(state: AppState) -> Router {
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = cors_layer();
 
     Router::new()
         .route("/", get(serve_index))
@@ -38,6 +36,29 @@ pub fn router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
+}
+
+fn cors_layer() -> CorsLayer {
+    let origins = std::env::var("EVM_DEBUGGER_CORS_ALLOW_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:8080,http://127.0.0.1:8080".to_string());
+
+    let list: Vec<HeaderValue> = origins
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse::<HeaderValue>().ok())
+        .collect();
+
+    let allow_origin = if list.is_empty() {
+        AllowOrigin::exact(HeaderValue::from_static("http://localhost:8080"))
+    } else {
+        AllowOrigin::list(list)
+    };
+
+    CorsLayer::new()
+        .allow_origin(allow_origin)
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([CONTENT_TYPE])
 }
 
 async fn fallback_handler(req: Request) -> impl IntoResponse {
@@ -275,5 +296,55 @@ mod tests {
         let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(v.is_array());
         assert_eq!(v.as_array().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn cors_allows_localhost_origin_by_default() {
+        let sessions: SessionMap = Arc::new(DashMap::new());
+        let app = router(AppState {
+            sessions,
+            evm_semaphore: Arc::new(Semaphore::new(1)),
+        });
+        let res = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/session/nope")
+                    .header(axum::http::header::ORIGIN, "http://localhost:8080")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), axum::http::StatusCode::NOT_FOUND);
+        assert_eq!(
+            res.headers()
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "http://localhost:8080"
+        );
+    }
+
+    #[tokio::test]
+    async fn cors_does_not_allow_random_origin_by_default() {
+        let sessions: SessionMap = Arc::new(DashMap::new());
+        let app = router(AppState {
+            sessions,
+            evm_semaphore: Arc::new(Semaphore::new(1)),
+        });
+        let res = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/session/nope")
+                    .header(axum::http::header::ORIGIN, "http://evil.example")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), axum::http::StatusCode::NOT_FOUND);
+        assert!(res
+            .headers()
+            .get(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .is_none());
     }
 }
