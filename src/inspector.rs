@@ -1,12 +1,12 @@
 use crate::types::{CallFrame, LogEntry, StepSnapshot};
+use revm::context::ContextTr;
+use revm::context_interface::{JournalTr, Transaction};
 use revm::inspector::Inspector;
 use revm::interpreter::{
     interpreter_types::{Jumps, MemoryTr, StackTr},
-    CallInputs, CallOutcome, CreateInputs, CreateOutcome, Interpreter, InterpreterTypes,
-    CallScheme, InstructionResult,
+    CallInputs, CallOutcome, CallScheme, CreateInputs, CreateOutcome, InstructionResult,
+    Interpreter, InterpreterTypes,
 };
-use revm::context::ContextTr;
-use revm::context_interface::{JournalTr, Transaction};
 use revm::primitives::{hex, Address, Log};
 use revm::state::bytecode::opcode::OpCode;
 use std::collections::HashMap;

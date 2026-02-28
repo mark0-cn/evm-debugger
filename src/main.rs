@@ -84,7 +84,7 @@ async fn session_gc_task(sessions: SessionMap) {
         }
 
         tick = tick.wrapping_add(1);
-        if tick % 10 == 0 {
+        if tick.is_multiple_of(10) {
             let _ = tokio::task::spawn_blocking(move || cleanup_cache_dir(cache_ttl_secs)).await;
         }
     }
@@ -112,10 +112,8 @@ fn cleanup_cache_dir(ttl_secs: u64) -> anyhow::Result<usize> {
             Err(_) => continue,
         };
         let age = now.duration_since(modified).unwrap_or_default().as_secs();
-        if age > ttl_secs {
-            if std::fs::remove_file(&path).is_ok() {
-                removed += 1;
-            }
+        if age > ttl_secs && std::fs::remove_file(&path).is_ok() {
+            removed += 1;
         }
     }
     Ok(removed)
