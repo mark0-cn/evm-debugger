@@ -29,6 +29,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(serve_index))
         .route("/api/session", post(create_session))
         .route("/api/session/:id", get(get_session))
+        .route("/api/session/:id/trace_steps", get(get_trace_steps))
         .route("/api/session/:id/step_into", post(step_into))
         .route("/api/session/:id/step_over", post(step_over))
         .route("/api/session/:id/continue", post(continue_exec))
@@ -75,6 +76,20 @@ async fn create_session(
 async fn get_session(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     match state.sessions.get(&id) {
         Some(session) => Json(session.current_state()).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "session not found" })),
+        )
+            .into_response(),
+    }
+}
+
+async fn get_trace_steps(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    match state.sessions.get(&id) {
+        Some(session) => Json(session.get_trace_steps()).into_response(),
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "session not found" })),

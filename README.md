@@ -8,6 +8,7 @@
 - 即时步进：步入/步过/继续均为本地快照索引移动（无需再次 RPC）
 - 快照缓存：首次回放后落盘 trace cache，再次加载同一交易可跳过回放阶段 RPC
 - 轻量 opcode 列表：服务端返回 `trace_steps`，前端可立即渲染全量 opcode 列表
+- 异步创建会话：创建会话会先返回 `Loading`，前端轮询等待回放完成（避免大交易阻塞连接）
 
 ## 快速开始
 
@@ -64,6 +65,7 @@ export all_proxy=socks5://127.0.0.1:7890
 |--------|------|------|
 | POST | `/api/session` | 创建会话，body: `{"tx_hash","rpc_url"}` |
 | GET  | `/api/session/:id` | 获取当前会话状态 |
+| GET  | `/api/session/:id/trace_steps` | 获取全量 opcode 列表（就绪后可用） |
 | POST | `/api/session/:id/step_into` | 步入（F11） |
 | POST | `/api/session/:id/step_over` | 步过（F10） |
 | POST | `/api/session/:id/continue` | 运行到结束（F5） |

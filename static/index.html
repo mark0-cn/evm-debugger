@@ -155,14 +155,32 @@ async function loadTx() {
     if (data.error) { setStatus('Error: ' + data.error); return; }
     currentSessionId = data.session_id;
     document.getElementById('sessionId').textContent = 'Session: ' + currentSessionId.slice(0,8);
-    // Populate the full opcode list immediately from the pre-collected trace.
     allTraceSteps = data.trace_steps || [];
-    setStatus('');
     processState(data.state);
+    if (data.state && data.state.status === 'loading') {
+      setStatus('Loading (running full trace)...');
+      await pollUntilReady(currentSessionId);
+    }
   } catch(e) {
     setStatus('Error: ' + e.message);
   } finally {
     loadInFlight = false;
+  }
+}
+
+async function pollUntilReady(sessionId) {
+  for (;;) {
+    await new Promise(r => setTimeout(r, 500));
+    const resp = await fetch(`/api/session/${sessionId}`);
+    const state = await resp.json();
+    if (state && state.status === 'loading') continue;
+    if (state && state.status === 'paused') {
+      const traceResp = await fetch(`/api/session/${sessionId}/trace_steps`);
+      const trace = await traceResp.json();
+      allTraceSteps = trace || [];
+    }
+    processState(state);
+    return;
   }
 }
 
@@ -173,7 +191,6 @@ function processState(state) {
     setButtonsEnabled(true);
     const snap = state.snapshot;
     updateStatusBar(snap);
-    // Highlight current step in the pre-loaded full trace list.
     renderOpcodeList(allTraceSteps, snap.step_number);
     renderStack(snap.stack);
     renderMemory(snap.memory_hex);
@@ -181,6 +198,9 @@ function processState(state) {
     renderStorage(snap.storage_changes);
     renderLogs(snap.logs);
     setStatus('');
+  } else if (state.status === 'loading') {
+    setButtonsEnabled(false);
+    renderOpcodeList([], -1);
   } else if (state.status === 'finished') {
     setButtonsEnabled(false);
     const r = state.result;

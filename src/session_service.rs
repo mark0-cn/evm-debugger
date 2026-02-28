@@ -44,21 +44,18 @@ impl SessionService {
         spawn_evm_thread(tx_info, req.rpc_url, snap_tx, abort_flag, runtime);
 
         let session_for_wait = session.clone();
-        let initial_state =
-            tokio::task::spawn_blocking(move || session_for_wait.wait_for_snapshots())
-                .await
-                .unwrap_or(SessionState::Error {
-                    message: "Spawn blocking failed".to_string(),
-                });
-
-        if let Some((snapshots, result)) = session.snapshots_for_cache() {
-            let _ = save_trace_cache(&trace_path, &snapshots, &result);
-        }
+        let trace_path_for_wait = trace_path.clone();
+        std::thread::spawn(move || {
+            let _ = session_for_wait.wait_for_snapshots();
+            if let Some((snapshots, result)) = session_for_wait.snapshots_for_cache() {
+                let _ = save_trace_cache(&trace_path_for_wait, &snapshots, &result);
+            }
+        });
 
         Ok(CreateSessionResponse {
             session_id,
-            state: initial_state,
-            trace_steps: session.get_trace_steps(),
+            state: SessionState::Loading,
+            trace_steps: vec![],
         })
     }
 }
