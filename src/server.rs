@@ -75,7 +75,10 @@ async fn create_session(
 
 async fn get_session(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     match state.sessions.get(&id) {
-        Some(session) => Json(session.current_state()).into_response(),
+        Some(session) => {
+            session.touch();
+            Json(session.current_state()).into_response()
+        }
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "session not found" })),
@@ -89,7 +92,10 @@ async fn get_trace_steps(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     match state.sessions.get(&id) {
-        Some(session) => Json(session.get_trace_steps()).into_response(),
+        Some(session) => {
+            session.touch();
+            Json(session.get_trace_steps()).into_response()
+        }
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "session not found" })),
@@ -100,7 +106,10 @@ async fn get_trace_steps(
 
 async fn step_into(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     let session = match state.sessions.get(&id) {
-        Some(s) => s.value().clone(),
+        Some(s) => {
+            s.value().touch();
+            s.value().clone()
+        }
         None => {
             return (
                 StatusCode::NOT_FOUND,
@@ -121,7 +130,10 @@ async fn step_into(Path(id): Path<String>, State(state): State<AppState>) -> imp
 
 async fn step_over(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     let session = match state.sessions.get(&id) {
-        Some(s) => s.value().clone(),
+        Some(s) => {
+            s.value().touch();
+            s.value().clone()
+        }
         None => {
             tracing::warn!("[step_over] session not found: {}", id);
             return (
@@ -146,7 +158,10 @@ async fn step_over(Path(id): Path<String>, State(state): State<AppState>) -> imp
 
 async fn continue_exec(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     let session = match state.sessions.get(&id) {
-        Some(s) => s.value().clone(),
+        Some(s) => {
+            s.value().touch();
+            s.value().clone()
+        }
         None => {
             return (
                 StatusCode::NOT_FOUND,
@@ -167,7 +182,10 @@ async fn continue_exec(Path(id): Path<String>, State(state): State<AppState>) ->
 
 async fn abort_session(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     let session = match state.sessions.get(&id) {
-        Some(s) => s.value().clone(),
+        Some(s) => {
+            s.value().touch();
+            s.value().clone()
+        }
         None => {
             return (
                 StatusCode::NOT_FOUND,

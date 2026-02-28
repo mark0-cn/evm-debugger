@@ -1,9 +1,11 @@
 use crate::types::{ChannelMessage, ExecutionResultInfo, SessionState, StepSnapshot, TraceStep};
+use std::sync::atomic::AtomicU64;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::Receiver,
     Arc, Mutex, MutexGuard,
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Internal session data, stored once EVM finishes.
 enum SessionData {
@@ -23,9 +25,17 @@ pub struct DebugSession {
     snap_rx: Mutex<Option<Receiver<ChannelMessage>>>,
     /// Set by abort handler; inspector checks this and halts.
     pub abort_flag: Arc<AtomicBool>,
+    last_access_secs: AtomicU64,
 }
 
 impl DebugSession {
+    fn now_secs() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    }
+
     fn data_lock(&self) -> MutexGuard<'_, SessionData> {
         self.data.lock().unwrap_or_else(|e| e.into_inner())
     }
@@ -39,6 +49,7 @@ impl DebugSession {
             data: Arc::new(Mutex::new(SessionData::Loading)),
             snap_rx: Mutex::new(Some(snap_rx)),
             abort_flag,
+            last_access_secs: AtomicU64::new(Self::now_secs()),
         })
     }
 
@@ -54,7 +65,17 @@ impl DebugSession {
             })),
             snap_rx: Mutex::new(None),
             abort_flag: Arc::new(AtomicBool::new(false)),
+            last_access_secs: AtomicU64::new(Self::now_secs()),
         })
+    }
+
+    pub fn touch(&self) {
+        self.last_access_secs
+            .store(Self::now_secs(), Ordering::Relaxed);
+    }
+
+    pub fn last_access_secs(&self) -> u64 {
+        self.last_access_secs.load(Ordering::Relaxed)
     }
 
     pub fn snapshots_for_cache(&self) -> Option<(Vec<StepSnapshot>, Option<ExecutionResultInfo>)> {
@@ -322,5 +343,15 @@ mod tests {
             panic!("poison");
         });
         let _ = session.current_state();
+    }
+
+    #[test]
+    fn touch_updates_last_access() {
+        let session = DebugSession::from_cache(vec![dummy_snapshot(0, 0)], None);
+        session
+            .last_access_secs
+            .store(1, std::sync::atomic::Ordering::Relaxed);
+        session.touch();
+        assert!(session.last_access_secs() >= 1);
     }
 }

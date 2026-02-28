@@ -45,6 +45,10 @@ http://localhost:8080
 
 命中 trace cache 时，创建会话将直接从本地快照恢复，不再触发回放阶段的 RPC 状态读取。
 
+缓存清理：
+
+- `EVM_DEBUGGER_CACHE_TTL_SECS` 控制 `cache/` 清理阈值（秒），默认 7 天。
+
 ## 代理（可选）
 
 如果你的环境需要代理访问外网 RPC，可在运行前设置环境变量：
