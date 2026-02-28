@@ -7,7 +7,7 @@
 - 交易回放：按链上区块环境重放已上链交易并生成逐步快照
 - 即时步进：步入/步过/继续均为本地快照索引移动（无需再次 RPC）
 - 快照缓存：首次回放后落盘 trace cache，再次加载同一交易可跳过回放阶段 RPC
-- 轻量 opcode 列表：服务端返回 `trace_steps`，前端可立即渲染全量 opcode 列表
+- 轻量 opcode 列表：命中 trace cache 时会随创建会话返回 `trace_steps`；冷启动则在会话就绪后通过 `/api/session/:id/trace_steps` 拉取
 - 异步创建会话：创建会话会先返回 `Loading`，前端轮询等待回放完成（避免大交易阻塞连接）
 
 ## 快速开始
@@ -29,10 +29,22 @@ cargo run
 http://localhost:8080
 ```
 
+默认仅监听 `127.0.0.1:8080`。如需对外提供服务可设置：
+
+```bash
+export EVM_DEBUGGER_BIND_ADDR=0.0.0.0:8080
+```
+
+如需跨域访问（不建议对公网全放开），可设置允许的 Origin 列表：
+
+```bash
+export EVM_DEBUGGER_CORS_ALLOW_ORIGINS=http://localhost:8080,http://127.0.0.1:8080
+```
+
 在页面顶部输入：
 
 - TX Hash：交易哈希（支持大小写与是否带 `0x`，服务端会规范化）
-- RPC URL：JSON-RPC 入口（建议使用带额度/稳定的 RPC）
+- RPC URL：JSON-RPC 入口（仅支持 http/https；默认拒绝 localhost/私网地址）
 
 然后点击 Load（或在 TX Hash 输入框按 Enter）。
 
@@ -55,12 +67,12 @@ http://localhost:8080
 
 ## 代理（可选）
 
-如果你的环境需要代理访问外网 RPC，可在运行前设置环境变量：
+如果你的环境需要代理访问外网 RPC，本项目会在启动时默认读取当前目录的 `.env`（若存在），你可以把代理环境变量写进去，例如：
 
 ```bash
-export https_proxy=http://127.0.0.1:7890
-export http_proxy=http://127.0.0.1:7890
-export all_proxy=socks5://127.0.0.1:7890
+https_proxy=http://127.0.0.1:7890
+http_proxy=http://127.0.0.1:7890
+all_proxy=socks5://127.0.0.1:7890
 ```
 
 不同工具/库对大小写支持不一致，必要时可同时设置 `HTTPS_PROXY/HTTP_PROXY/ALL_PROXY`。

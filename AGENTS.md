@@ -62,6 +62,11 @@ cache/
 - 日志：通过 `RUST_LOG` 控制（例如 `info`/`debug`），默认 `info`。
 - 安全：不要在仓库中提交任何 RPC key / token；公开仓库建议使用无密钥 RPC 或在本地配置。
 - 网络：如需代理访问外网 RPC，可通过环境变量配置 `http_proxy/https_proxy/all_proxy`（大小写均可）。
+- 本地：启动时默认尝试读取当前目录 `.env`（若存在），方便本地放置代理/RPC 等环境变量（不要提交到仓库）。
+- 监听：默认仅绑定 `127.0.0.1:8080`；可用 `EVM_DEBUGGER_BIND_ADDR` 修改（例如 `0.0.0.0:8080`）。
+- CORS：默认仅允许 `http://localhost:8080,http://127.0.0.1:8080`；可用 `EVM_DEBUGGER_CORS_ALLOW_ORIGINS`（逗号分隔）修改。
+- RPC：默认拒绝 `localhost`/私网 IP 作为 `rpc_url`；可用 `EVM_DEBUGGER_RPC_ALLOWLIST`（逗号分隔，host 或 host:port）启用 allowlist 模式。
+- RPC：`EVM_DEBUGGER_RPC_TIMEOUT_SECS` 控制 RPC 查询超时（秒），默认 `20`。
 - 会话：`EVM_DEBUGGER_SESSION_TTL_SECS` 控制会话空闲清理阈值（秒），默认 `1800`。
 - 缓存：`EVM_DEBUGGER_CACHE_TTL_SECS` 控制 `cache/` 清理阈值（秒），默认 `604800`（7 天）。
 - 快照：`EVM_DEBUGGER_MAX_MEMORY_BYTES` 控制每步 memory 采样上限（字节），默认 `4096`。

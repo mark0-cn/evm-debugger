@@ -6,6 +6,7 @@ use alloy_rpc_client::ClientBuilder;
 use alloy_transport::layers::RetryBackoffLayer;
 use anyhow::{anyhow, Context, Result};
 use std::path::Path;
+use std::time::Duration;
 
 use crate::fs_utils::write_atomic;
 
@@ -48,9 +49,7 @@ pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo>
 
     tracing::info!("Fetching tx {} from RPC", canonical_hash);
 
-    let rpc_url_parsed: url::Url = rpc_url
-        .parse()
-        .with_context(|| format!("parsing RPC URL: {}", rpc_url))?;
+    let rpc_url_parsed = crate::rpc_url::validate_rpc_url(rpc_url)?;
 
     let rpc_client = ClientBuilder::default()
         .layer(RetryBackoffLayer::new(
@@ -61,9 +60,15 @@ pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo>
         .http(rpc_url_parsed);
     let provider = ProviderBuilder::new().connect_client(rpc_client);
 
-    let tx = provider
-        .get_transaction_by_hash(hash)
+    let timeout_secs = std::env::var("EVM_DEBUGGER_RPC_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(20);
+    let timeout = Duration::from_secs(timeout_secs);
+
+    let tx = tokio::time::timeout(timeout, provider.get_transaction_by_hash(hash))
         .await
+        .with_context(|| format!("timeout fetching transaction {}", canonical_hash))?
         .with_context(|| format!("fetching transaction {}", canonical_hash))?
         .ok_or_else(|| anyhow!("transaction not found: {}", canonical_hash))?;
 
@@ -71,11 +76,14 @@ pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo>
         .block_number
         .ok_or_else(|| anyhow!("transaction is pending (no block number)"))?;
 
-    let block = provider
-        .get_block_by_number(BlockNumberOrTag::Number(block_number))
-        .await
-        .with_context(|| format!("fetching block {}", block_number))?
-        .ok_or_else(|| anyhow!("block {} not found", block_number))?;
+    let block = tokio::time::timeout(
+        timeout,
+        provider.get_block_by_number(BlockNumberOrTag::Number(block_number)),
+    )
+    .await
+    .with_context(|| format!("timeout fetching block {}", block_number))?
+    .with_context(|| format!("fetching block {}", block_number))?
+    .ok_or_else(|| anyhow!("block {} not found", block_number))?;
 
     let inner = &tx.inner;
     let caller = format!("{:#x}", inner.signer());

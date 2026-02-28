@@ -32,7 +32,7 @@ pub fn spawn_evm_thread(
     std::thread::spawn(move || {
         let _guard = runtime.enter();
 
-        let provider = match rpc_url.parse::<url::Url>() {
+        let provider = match crate::rpc_url::validate_rpc_url(&rpc_url) {
             Ok(url) => {
                 // Wrap the HTTP transport with a retry-backoff layer so that
                 // transient 429 / 5xx responses from rate-limited public RPCs are
@@ -46,10 +46,10 @@ pub fn spawn_evm_thread(
                     .http(url);
                 ProviderBuilder::new().connect_client(rpc_client)
             }
-            Err(_) => {
+            Err(e) => {
                 let _ = snap_tx.send(ChannelMessage::Error(format!(
-                    "Invalid RPC URL: {}",
-                    rpc_url
+                    "Invalid RPC URL: {}; {}",
+                    rpc_url, e
                 )));
                 return;
             }

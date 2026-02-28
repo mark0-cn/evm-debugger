@@ -4,6 +4,7 @@ mod executor;
 mod fetcher;
 mod fs_utils;
 mod inspector;
+mod rpc_url;
 mod server;
 mod session;
 mod session_service;
@@ -19,12 +20,7 @@ use tokio::sync::Semaphore;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    std::env::set_var("https_proxy", "http://127.0.0.1:7890");
-    std::env::set_var("http_proxy", "http://127.0.0.1:7890");
-    std::env::set_var("all_proxy", "socks5://127.0.0.1:7890");
-    std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:7890");
-    std::env::set_var("HTTP_PROXY", "http://127.0.0.1:7890");
-    std::env::set_var("ALL_PROXY", "socks5://127.0.0.1:7890");
+    let _ = dotenvy::dotenv();
 
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -46,8 +42,10 @@ async fn main() -> anyhow::Result<()> {
 
     let app = router(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
-    tracing::info!("EVM Debugger listening on http://0.0.0.0:8080");
+    let bind_addr =
+        std::env::var("EVM_DEBUGGER_BIND_ADDR").unwrap_or_else(|_| "127.0.0.1:8080".to_string());
+    let listener = tokio::net::TcpListener::bind(&bind_addr).await?;
+    tracing::info!("EVM Debugger listening on http://{}", bind_addr);
 
     axum::serve(listener, app).await?;
     Ok(())
@@ -84,7 +82,7 @@ async fn session_gc_task(sessions: SessionMap) {
         }
 
         tick = tick.wrapping_add(1);
-        if tick % 10 == 0 {
+        if tick.is_multiple_of(10) {
             let _ = tokio::task::spawn_blocking(move || cleanup_cache_dir(cache_ttl_secs)).await;
         }
     }
@@ -112,10 +110,8 @@ fn cleanup_cache_dir(ttl_secs: u64) -> anyhow::Result<usize> {
             Err(_) => continue,
         };
         let age = now.duration_since(modified).unwrap_or_default().as_secs();
-        if age > ttl_secs {
-            if std::fs::remove_file(&path).is_ok() {
-                removed += 1;
-            }
+        if age > ttl_secs && std::fs::remove_file(&path).is_ok() {
+            removed += 1;
         }
     }
     Ok(removed)

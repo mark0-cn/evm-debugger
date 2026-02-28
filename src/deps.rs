@@ -1,11 +1,7 @@
 use crate::trace_cache::TraceCacheFile;
 use crate::types::{CachedTxInfo, ChannelMessage, ExecutionResultInfo, StepSnapshot};
 use std::future::Future;
-use std::sync::{
-    atomic::AtomicBool,
-    mpsc::SyncSender,
-    Arc,
-};
+use std::sync::{atomic::AtomicBool, mpsc::SyncSender, Arc};
 
 pub trait TxFetcher: Send + Sync + 'static {
     type Fut<'a>: Future<Output = anyhow::Result<CachedTxInfo>> + Send + 'a
