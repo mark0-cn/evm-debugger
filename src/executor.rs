@@ -27,23 +27,10 @@ pub fn spawn_evm_thread(
     rpc_url: String,
     snap_tx: SyncSender<ChannelMessage>,
     abort_flag: Arc<AtomicBool>,
+    runtime: tokio::runtime::Handle,
 ) {
     std::thread::spawn(move || {
-        let rt = match tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(rt) => rt,
-            Err(e) => {
-                let _ = snap_tx.send(ChannelMessage::Error(format!(
-                    "Failed to build runtime: {}",
-                    e
-                )));
-                return;
-            }
-        };
-
-        let _guard = rt.enter();
+        let _guard = runtime.enter();
 
         let provider = match rpc_url.parse::<url::Url>() {
             Ok(url) => {
@@ -220,7 +207,5 @@ pub fn spawn_evm_thread(
         };
 
         let _ = snap_tx.send(ChannelMessage::AllSnapshots { snapshots, result });
-
-        drop(rt);
     });
 }
