@@ -59,7 +59,7 @@ async fn create_session(
     State(state): State<AppState>,
     Json(req): Json<CreateSessionRequest>,
 ) -> impl IntoResponse {
-    let svc = SessionService::new(state.sessions.clone());
+    let svc = SessionService::new(state.sessions.clone(), state.evm_semaphore.clone());
     match svc.create_session(req).await {
         Ok(resp) => Json(resp).into_response(),
         Err(e) => {
@@ -75,7 +75,10 @@ async fn create_session(
 
 async fn get_session(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     match state.sessions.get(&id) {
-        Some(session) => Json(session.current_state()).into_response(),
+        Some(session) => {
+            session.touch();
+            Json(session.current_state()).into_response()
+        }
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "session not found" })),
@@ -89,7 +92,10 @@ async fn get_trace_steps(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     match state.sessions.get(&id) {
-        Some(session) => Json(session.get_trace_steps()).into_response(),
+        Some(session) => {
+            session.touch();
+            Json(session.get_trace_steps()).into_response()
+        }
         None => (
             StatusCode::NOT_FOUND,
             Json(json!({ "error": "session not found" })),
@@ -100,7 +106,10 @@ async fn get_trace_steps(
 
 async fn step_into(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     let session = match state.sessions.get(&id) {
-        Some(s) => s.value().clone(),
+        Some(s) => {
+            s.value().touch();
+            s.value().clone()
+        }
         None => {
             return (
                 StatusCode::NOT_FOUND,
@@ -121,7 +130,10 @@ async fn step_into(Path(id): Path<String>, State(state): State<AppState>) -> imp
 
 async fn step_over(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     let session = match state.sessions.get(&id) {
-        Some(s) => s.value().clone(),
+        Some(s) => {
+            s.value().touch();
+            s.value().clone()
+        }
         None => {
             tracing::warn!("[step_over] session not found: {}", id);
             return (
@@ -146,7 +158,10 @@ async fn step_over(Path(id): Path<String>, State(state): State<AppState>) -> imp
 
 async fn continue_exec(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     let session = match state.sessions.get(&id) {
-        Some(s) => s.value().clone(),
+        Some(s) => {
+            s.value().touch();
+            s.value().clone()
+        }
         None => {
             return (
                 StatusCode::NOT_FOUND,
@@ -167,7 +182,10 @@ async fn continue_exec(Path(id): Path<String>, State(state): State<AppState>) ->
 
 async fn abort_session(Path(id): Path<String>, State(state): State<AppState>) -> impl IntoResponse {
     let session = match state.sessions.get(&id) {
-        Some(s) => s.value().clone(),
+        Some(s) => {
+            s.value().touch();
+            s.value().clone()
+        }
         None => {
             return (
                 StatusCode::NOT_FOUND,
@@ -178,4 +196,84 @@ async fn abort_session(Path(id): Path<String>, State(state): State<AppState>) ->
     };
     session.abort();
     Json(json!({ "status": "aborted" })).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::router;
+    use crate::{
+        app_state::{AppState, SessionMap},
+        session::DebugSession,
+        types::StepSnapshot,
+    };
+    use dashmap::DashMap;
+    use http_body_util::BodyExt;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tokio::sync::Semaphore;
+    use tower::ServiceExt;
+
+    fn dummy_snapshot(step: u64) -> StepSnapshot {
+        StepSnapshot {
+            step_number: step,
+            pc: 0,
+            opcode: 0,
+            opcode_name: "STOP".to_string(),
+            call_depth: 0,
+            gas_remaining: 0,
+            gas_used: 0,
+            stack: vec![],
+            memory_size: 0,
+            memory_hex: String::new(),
+            memory_truncated: false,
+            storage_changes: HashMap::new(),
+            call_stack: vec![],
+            logs: vec![],
+            contract_address: "0x0000000000000000000000000000000000000000".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn get_session_404() {
+        let sessions: SessionMap = Arc::new(DashMap::new());
+        let app = router(AppState {
+            sessions,
+            evm_semaphore: Arc::new(Semaphore::new(1)),
+        });
+        let res = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/session/nope")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), axum::http::StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn trace_steps_returns_json_array() {
+        let sessions: SessionMap = Arc::new(DashMap::new());
+        let session = DebugSession::from_cache(vec![dummy_snapshot(0)], None);
+        sessions.insert("s1".to_string(), session);
+        let app = router(AppState {
+            sessions,
+            evm_semaphore: Arc::new(Semaphore::new(1)),
+        });
+        let res = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/session/s1/trace_steps")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), axum::http::StatusCode::OK);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(v.is_array());
+        assert_eq!(v.as_array().unwrap().len(), 1);
+    }
 }

@@ -193,7 +193,7 @@ function processState(state) {
     updateStatusBar(snap);
     renderOpcodeList(allTraceSteps, snap.step_number);
     renderStack(snap.stack);
-    renderMemory(snap.memory_hex);
+    renderMemory(snap.memory_hex, snap.memory_truncated, snap.memory_size);
     renderCallStack(snap.call_stack);
     renderStorage(snap.storage_changes);
     renderLogs(snap.logs);
@@ -267,12 +267,13 @@ function renderStack(stack) {
   ).join('');
 }
 
-function renderMemory(hexStr) {
+function renderMemory(hexStr, truncated, totalSize) {
   const panel = document.getElementById('memoryPanel');
   if (!hexStr || hexStr.length === 0) {
     panel.innerHTML = '<p class="loading">(empty)</p>';
     return;
   }
+  const banner = truncated ? `<p class="loading">(truncated, total ${totalSize} bytes)</p>` : '';
   const bytes = hexStr.match(/.{1,2}/g) || [];
   let rows = '';
   for (let i = 0; i < bytes.length; i += 32) {
@@ -280,7 +281,7 @@ function renderMemory(hexStr) {
     const chunk = bytes.slice(i, i + 32).join(' ');
     rows += `<div class="memory-row"><span class="offset">${offset}</span>${chunk}</div>`;
   }
-  panel.innerHTML = rows;
+  panel.innerHTML = banner + rows;
 }
 
 function renderCallStack(callStack) {

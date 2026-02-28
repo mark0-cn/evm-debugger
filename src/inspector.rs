@@ -25,10 +25,15 @@ pub struct StepDebugInspector {
     storage_changes: HashMap<String, HashMap<String, String>>,
     step_number: u64,
     gas_initial: u64,
+    max_memory_bytes: usize,
 }
 
 impl StepDebugInspector {
     pub fn new(snapshots: Arc<Mutex<Vec<StepSnapshot>>>, abort_flag: Arc<AtomicBool>) -> Self {
+        let max_memory_bytes = std::env::var("EVM_DEBUGGER_MAX_MEMORY_BYTES")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(4096);
         Self {
             snapshots,
             abort_flag,
@@ -37,7 +42,17 @@ impl StepDebugInspector {
             storage_changes: HashMap::new(),
             step_number: 0,
             gas_initial: 0,
+            max_memory_bytes,
         }
+    }
+
+    fn encode_memory_hex(bytes: &[u8], max_bytes: usize) -> (String, bool) {
+        if bytes.is_empty() {
+            return (String::new(), false);
+        }
+        let truncated = bytes.len() > max_bytes;
+        let end = bytes.len().min(max_bytes);
+        (hex::encode(&bytes[..end]), truncated)
     }
 
     fn capture_snapshot<INTR>(&self, interp: &Interpreter<INTR>, depth: usize) -> StepSnapshot
@@ -60,11 +75,11 @@ impl StepDebugInspector {
             .collect();
 
         let mem_size = interp.memory.size();
-        let memory_hex = if mem_size > 0 {
+        let (memory_hex, memory_truncated) = if mem_size > 0 {
             let slice = interp.memory.slice(0..mem_size);
-            hex::encode(slice.as_ref())
+            Self::encode_memory_hex(slice.as_ref(), self.max_memory_bytes)
         } else {
-            String::new()
+            (String::new(), false)
         };
 
         let contract_address = if let Some(frame) = self.call_stack.last() {
@@ -88,11 +103,33 @@ impl StepDebugInspector {
             stack,
             memory_size: mem_size,
             memory_hex,
+            memory_truncated,
             storage_changes: self.storage_changes.clone(),
             call_stack: self.call_stack.clone(),
             logs: self.logs.clone(),
             contract_address,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StepDebugInspector;
+
+    #[test]
+    fn encode_memory_hex_truncates() {
+        let bytes = vec![0u8; 10];
+        let (hex, truncated) = StepDebugInspector::encode_memory_hex(&bytes, 4);
+        assert_eq!(hex.len(), 8);
+        assert!(truncated);
+    }
+
+    #[test]
+    fn encode_memory_hex_no_truncate() {
+        let bytes = vec![1u8, 2u8];
+        let (hex, truncated) = StepDebugInspector::encode_memory_hex(&bytes, 4);
+        assert_eq!(hex, "0102");
+        assert!(!truncated);
     }
 }
 
