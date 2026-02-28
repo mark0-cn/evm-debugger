@@ -7,9 +7,9 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use dioxus_liveview::LiveviewRouter;
 use serde_json::json;
 use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 fn format_anyhow_chain(e: &anyhow::Error) -> String {
@@ -23,13 +23,7 @@ fn format_anyhow_chain(e: &anyhow::Error) -> String {
 
 pub fn router(state: AppState) -> Router {
     let cors = cors_layer();
-    let dist_dir =
-        std::env::var("EVM_DEBUGGER_APP_DIST_DIR").unwrap_or_else(|_| "ui/dist".to_string());
-
     Router::new()
-        .route("/", get(serve_index))
-        .route_service("/app", ServeFile::new(format!("{}/index.html", dist_dir)))
-        .nest_service("/assets", ServeDir::new(format!("{}/assets", dist_dir)))
         .route("/api/session", post(create_session))
         .route("/api/session/:id", get(get_session))
         .route("/api/session/:id/trace_steps", get(get_trace_steps))
@@ -41,6 +35,7 @@ pub fn router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
+        .with_app("/", crate::ui::app)
 }
 
 fn cors_layer() -> CorsLayer {
@@ -74,22 +69,6 @@ async fn fallback_handler(req: Request) -> impl IntoResponse {
         StatusCode::NOT_FOUND,
         Json(json!({ "error": "route not found", "method": method, "path": path })),
     )
-}
-
-async fn serve_index() -> axum::response::Response {
-    let use_app_root = std::env::var("EVM_DEBUGGER_SERVE_APP_AT_ROOT")
-        .ok()
-        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
-    if use_app_root {
-        let dist_dir =
-            std::env::var("EVM_DEBUGGER_APP_DIST_DIR").unwrap_or_else(|_| "ui/dist".to_string());
-        let path = format!("{}/index.html", dist_dir);
-        if let Ok(html) = std::fs::read_to_string(path) {
-            return axum::response::Html(html).into_response();
-        }
-    }
-
-    axum::response::Html(include_str!("../static/index.html")).into_response()
 }
 
 async fn create_session(

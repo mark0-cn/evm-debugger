@@ -10,6 +10,7 @@ mod session;
 mod session_service;
 mod trace_cache;
 mod types;
+mod ui;
 
 use app_state::{AppState, SessionMap};
 use dashmap::DashMap;

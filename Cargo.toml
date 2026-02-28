@@ -40,6 +40,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy          = "0.15"
 tao              = "0.34"
 wry              = "0.52"
+dioxus           = "0.6"
+dioxus-liveview  = { version = "0.6", features = ["axum"] }
 
 [dev-dependencies]
 tower = "0.5"
