@@ -97,7 +97,9 @@ impl<F: TxFetcher, C: TraceCache, E: Executor> SessionService<F, C, E> {
     pub async fn create_session(&self, req: CreateSessionRequest) -> Result<CreateSessionResponse> {
         let session_id = uuid::Uuid::new_v4().to_string();
         let canonical_hash = canonicalize_tx_hash(&req.tx_hash)?;
-        let tx_info = self.fetcher.fetch(&canonical_hash, &req.rpc_url).await?;
+        let rpc_url = crate::rpc_url::validate_rpc_url(&req.rpc_url)?;
+        let rpc_url_str = rpc_url.to_string();
+        let tx_info = self.fetcher.fetch(&canonical_hash, &rpc_url_str).await?;
 
         let trace_path =
             self.cache
@@ -126,7 +128,7 @@ impl<F: TxFetcher, C: TraceCache, E: Executor> SessionService<F, C, E> {
         tokio::spawn(async move {
             let _permit = sem.acquire_owned().await.ok();
             let runtime = tokio::runtime::Handle::current();
-            executor.spawn(tx_info, req.rpc_url, snap_tx, abort_flag, runtime);
+            executor.spawn(tx_info, rpc_url_str, snap_tx, abort_flag, runtime);
             let _ = tokio::task::spawn_blocking(move || {
                 let _ = session_for_bg.wait_for_snapshots();
                 if let Some((snapshots, result)) = session_for_bg.snapshots_for_cache() {
@@ -302,7 +304,7 @@ mod tests {
         let resp = svc
             .create_session(CreateSessionRequest {
                 tx_hash: "0x".to_string() + &"a".repeat(64),
-                rpc_url: "http://localhost".to_string(),
+                rpc_url: "https://example.com".to_string(),
             })
             .await
             .unwrap();
@@ -330,7 +332,7 @@ mod tests {
         let resp = svc
             .create_session(CreateSessionRequest {
                 tx_hash: "0x".to_string() + &"b".repeat(64),
-                rpc_url: "http://localhost".to_string(),
+                rpc_url: "https://example.com".to_string(),
             })
             .await
             .unwrap();

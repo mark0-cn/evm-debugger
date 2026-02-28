@@ -44,7 +44,7 @@ export EVM_DEBUGGER_CORS_ALLOW_ORIGINS=http://localhost:8080,http://127.0.0.1:80
 在页面顶部输入：
 
 - TX Hash：交易哈希（支持大小写与是否带 `0x`，服务端会规范化）
-- RPC URL：JSON-RPC 入口（建议使用带额度/稳定的 RPC）
+- RPC URL：JSON-RPC 入口（仅支持 http/https；默认拒绝 localhost/私网地址）
 
 然后点击 Load（或在 TX Hash 输入框按 Enter）。
 

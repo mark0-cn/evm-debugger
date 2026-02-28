@@ -4,6 +4,7 @@ mod executor;
 mod fetcher;
 mod fs_utils;
 mod inspector;
+mod rpc_url;
 mod server;
 mod session;
 mod session_service;
