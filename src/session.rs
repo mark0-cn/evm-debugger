@@ -239,3 +239,87 @@ impl DebugSession {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::DebugSession;
+    use crate::types::{ChannelMessage, ExecutionResultInfo, SessionState, StepSnapshot};
+    use std::collections::HashMap;
+    use std::sync::{atomic::AtomicBool, Arc};
+
+    fn dummy_snapshot(step: u64, depth: usize) -> StepSnapshot {
+        StepSnapshot {
+            step_number: step,
+            pc: 0,
+            opcode: 0,
+            opcode_name: "STOP".to_string(),
+            call_depth: depth,
+            gas_remaining: 0,
+            gas_used: 0,
+            stack: vec![],
+            memory_size: 0,
+            memory_hex: "0x".to_string(),
+            storage_changes: HashMap::new(),
+            call_stack: vec![],
+            logs: vec![],
+            contract_address: "0x0000000000000000000000000000000000000000".to_string(),
+        }
+    }
+
+    #[test]
+    fn abort_state_is_not_overwritten_by_late_snapshots() {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<ChannelMessage>(1);
+        let abort_flag = Arc::new(AtomicBool::new(false));
+        let session = DebugSession::new(rx, abort_flag);
+        session.abort();
+
+        let send_thread = std::thread::spawn(move || {
+            let _ = tx.send(ChannelMessage::AllSnapshots {
+                snapshots: vec![dummy_snapshot(0, 0)],
+                result: Some(ExecutionResultInfo {
+                    success: true,
+                    gas_used: 1,
+                    output: "0x".to_string(),
+                    reason: "Stop".to_string(),
+                }),
+            });
+        });
+
+        let state = session.wait_for_snapshots();
+        assert!(matches!(state, SessionState::Aborted));
+        assert!(matches!(session.current_state(), SessionState::Aborted));
+        let _ = send_thread.join();
+    }
+
+    #[test]
+    fn wait_for_snapshots_sets_ready_and_pauses_on_first_step() {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<ChannelMessage>(1);
+        let abort_flag = Arc::new(AtomicBool::new(false));
+        let session = DebugSession::new(rx, abort_flag);
+
+        let send_thread = std::thread::spawn(move || {
+            let _ = tx.send(ChannelMessage::AllSnapshots {
+                snapshots: vec![dummy_snapshot(7, 0)],
+                result: None,
+            });
+        });
+
+        let state = session.wait_for_snapshots();
+        match state {
+            SessionState::Paused { snapshot } => assert_eq!(snapshot.step_number, 7),
+            _ => panic!("expected paused"),
+        }
+        let _ = send_thread.join();
+    }
+
+    #[test]
+    fn poisoned_mutex_does_not_panic_on_read() {
+        let session = DebugSession::from_cache(vec![dummy_snapshot(0, 0)], None);
+        let s = session.clone();
+        let _ = std::panic::catch_unwind(move || {
+            let _guard = s.data.lock().unwrap();
+            panic!("poison");
+        });
+        let _ = session.current_state();
+    }
+}

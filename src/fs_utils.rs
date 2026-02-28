@@ -15,3 +15,19 @@ pub fn write_atomic(path: &str, contents: &str) -> Result<()> {
         .with_context(|| format!("renaming {} -> {}", tmp_path, path))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::write_atomic;
+
+    #[test]
+    fn write_atomic_writes_full_file() {
+        let path =
+            std::env::temp_dir().join(format!("evm-debugger-test-{}.txt", uuid::Uuid::new_v4()));
+        let path_str = path.to_string_lossy().to_string();
+        write_atomic(&path_str, "hello").unwrap();
+        let out = std::fs::read_to_string(&path_str).unwrap();
+        assert_eq!(out, "hello");
+        let _ = std::fs::remove_file(&path_str);
+    }
+}

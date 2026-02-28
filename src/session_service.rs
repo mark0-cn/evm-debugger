@@ -80,3 +80,22 @@ fn canonicalize_tx_hash(tx_hash: &str) -> Result<String> {
     };
     Ok(format!("{h:#x}"))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::canonicalize_tx_hash;
+
+    #[test]
+    fn canonicalize_tx_hash_accepts_prefix_and_case() {
+        let input = format!("  0X{}  ", "A".repeat(64));
+        let out = canonicalize_tx_hash(&input).unwrap();
+        assert_eq!(out, format!("0x{}", "a".repeat(64)));
+    }
+
+    #[test]
+    fn canonicalize_tx_hash_adds_prefix() {
+        let input = "b".repeat(64);
+        let out = canonicalize_tx_hash(&input).unwrap();
+        assert_eq!(out, format!("0x{}", "b".repeat(64)));
+    }
+}

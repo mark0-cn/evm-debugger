@@ -45,3 +45,23 @@ pub fn save_trace_cache(
     write_atomic(path, &json).with_context(|| format!("writing {}", path))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::trace_cache_path;
+
+    #[test]
+    fn trace_cache_path_strips_prefix() {
+        let p1 = trace_cache_path("0xAa", Some(1), 123);
+        assert_eq!(p1, "cache/trace_1_123_Aa.json");
+
+        let p2 = trace_cache_path("0XAa", Some(1), 123);
+        assert_eq!(p2, "cache/trace_1_123_Aa.json");
+    }
+
+    #[test]
+    fn trace_cache_path_unknown_chain() {
+        let p = trace_cache_path("0x00", None, 1);
+        assert_eq!(p, "cache/trace_unknown_1_00.json");
+    }
+}
