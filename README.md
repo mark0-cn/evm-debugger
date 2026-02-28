@@ -7,7 +7,7 @@
 - 交易回放：按链上区块环境重放已上链交易并生成逐步快照
 - 即时步进：步入/步过/继续均为本地快照索引移动（无需再次 RPC）
 - 快照缓存：首次回放后落盘 trace cache，再次加载同一交易可跳过回放阶段 RPC
-- 轻量 opcode 列表：服务端返回 `trace_steps`，前端可立即渲染全量 opcode 列表
+- 轻量 opcode 列表：命中 trace cache 时会随创建会话返回 `trace_steps`；冷启动则在会话就绪后通过 `/api/session/:id/trace_steps` 拉取
 - 异步创建会话：创建会话会先返回 `Loading`，前端轮询等待回放完成（避免大交易阻塞连接）
 
 ## 快速开始
