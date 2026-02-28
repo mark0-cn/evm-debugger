@@ -259,6 +259,7 @@ mod tests {
             stack: vec![],
             memory_size: 0,
             memory_hex: "0x".to_string(),
+            memory_truncated: false,
             storage_changes: HashMap::new(),
             call_stack: vec![],
             logs: vec![],

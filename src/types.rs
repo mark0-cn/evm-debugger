@@ -27,6 +27,7 @@ pub struct StepSnapshot {
     pub memory_size: usize,
     /// Full memory as hex dump
     pub memory_hex: String,
+    pub memory_truncated: bool,
     /// Storage changes grouped by contract address
     pub storage_changes: HashMap<String, HashMap<String, String>>,
     pub call_stack: Vec<CallFrame>,
