@@ -2,7 +2,7 @@ use crate::types::{ChannelMessage, ExecutionResultInfo, SessionState, StepSnapsh
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc::Receiver,
-    Arc, Mutex,
+    Arc, Mutex, MutexGuard,
 };
 
 /// Internal session data, stored once EVM finishes.
@@ -26,6 +26,14 @@ pub struct DebugSession {
 }
 
 impl DebugSession {
+    fn data_lock(&self) -> MutexGuard<'_, SessionData> {
+        self.data.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn snap_rx_lock(&self) -> MutexGuard<'_, Option<Receiver<ChannelMessage>>> {
+        self.snap_rx.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     pub fn new(snap_rx: Receiver<ChannelMessage>, abort_flag: Arc<AtomicBool>) -> Arc<Self> {
         Arc::new(Self {
             data: Arc::new(Mutex::new(SessionData::Loading)),
@@ -50,7 +58,7 @@ impl DebugSession {
     }
 
     pub fn snapshots_for_cache(&self) -> Option<(Vec<StepSnapshot>, Option<ExecutionResultInfo>)> {
-        let data = self.data.lock().unwrap();
+        let data = self.data_lock();
         match &*data {
             SessionData::Ready {
                 snapshots, result, ..
@@ -61,7 +69,7 @@ impl DebugSession {
 
     /// Block until the EVM thread sends all snapshots (called once, from spawn_blocking).
     pub fn wait_for_snapshots(&self) -> SessionState {
-        let rx = match self.snap_rx.lock().unwrap().take() {
+        let rx = match self.snap_rx_lock().take() {
             Some(r) => r,
             None => {
                 return SessionState::Error {
@@ -70,8 +78,18 @@ impl DebugSession {
             }
         };
 
-        let state = match rx.recv() {
-            Ok(ChannelMessage::AllSnapshots { snapshots, result }) => {
+        let msg = match rx.recv() {
+            Ok(m) => m,
+            Err(_) => ChannelMessage::Error("EVM thread disconnected".to_string()),
+        };
+
+        let mut data = self.data_lock();
+        if matches!(&*data, SessionData::Aborted) {
+            return SessionState::Aborted;
+        }
+
+        match msg {
+            ChannelMessage::AllSnapshots { snapshots, result } => {
                 if snapshots.is_empty() {
                     let s = match result.as_ref() {
                         Some(r) => SessionState::Finished { result: r.clone() },
@@ -79,7 +97,7 @@ impl DebugSession {
                             message: "Execution produced no steps".to_string(),
                         },
                     };
-                    *self.data.lock().unwrap() = SessionData::Ready {
+                    *data = SessionData::Ready {
                         snapshots: vec![],
                         current_index: 0,
                         result,
@@ -87,29 +105,23 @@ impl DebugSession {
                     return s;
                 }
                 let first = snapshots[0].clone();
-                *self.data.lock().unwrap() = SessionData::Ready {
+                *data = SessionData::Ready {
                     snapshots,
                     current_index: 0,
                     result,
                 };
                 SessionState::Paused { snapshot: first }
             }
-            Ok(ChannelMessage::Error(msg)) => {
-                *self.data.lock().unwrap() = SessionData::Error(msg.clone());
+            ChannelMessage::Error(msg) => {
+                *data = SessionData::Error(msg.clone());
                 SessionState::Error { message: msg }
             }
-            Err(_) => {
-                let msg = "EVM thread disconnected".to_string();
-                *self.data.lock().unwrap() = SessionData::Error(msg.clone());
-                SessionState::Error { message: msg }
-            }
-        };
-        state
+        }
     }
 
     /// Advance one step. Instant — just increments the index.
     pub fn step_into(&self) -> SessionState {
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data_lock();
         match &mut *data {
             SessionData::Ready {
                 snapshots,
@@ -125,7 +137,7 @@ impl DebugSession {
 
     /// Advance past the current call depth (step over inner CALLs).
     pub fn step_over(&self) -> SessionState {
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data_lock();
         match &mut *data {
             SessionData::Ready {
                 snapshots,
@@ -150,7 +162,7 @@ impl DebugSession {
 
     /// Jump to the end of execution.
     pub fn continue_exec(&self) -> SessionState {
-        let mut data = self.data.lock().unwrap();
+        let mut data = self.data_lock();
         match &mut *data {
             SessionData::Ready {
                 snapshots,
@@ -167,18 +179,18 @@ impl DebugSession {
     /// Signal abort: stops the EVM (if still running) and marks the session.
     pub fn abort(&self) {
         self.abort_flag.store(true, Ordering::Relaxed);
-        *self.data.lock().unwrap() = SessionData::Aborted;
+        *self.data_lock() = SessionData::Aborted;
     }
 
     /// Non-blocking snapshot of the current state.
     pub fn current_state(&self) -> SessionState {
-        let data = self.data.lock().unwrap();
+        let data = self.data_lock();
         self.current_state_locked(&data)
     }
 
     /// Extract lightweight trace (step, pc, opcode_name) for the full opcode list.
     pub fn get_trace_steps(&self) -> Vec<TraceStep> {
-        let data = self.data.lock().unwrap();
+        let data = self.data_lock();
         match &*data {
             SessionData::Ready { snapshots, .. } => snapshots
                 .iter()

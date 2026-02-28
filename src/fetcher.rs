@@ -7,6 +7,8 @@ use alloy_transport::layers::RetryBackoffLayer;
 use anyhow::{anyhow, Context, Result};
 use std::path::Path;
 
+use crate::fs_utils::write_atomic;
+
 /// Load transaction info: check cache first, then fetch from RPC.
 pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo> {
     let raw = tx_hash.trim();
@@ -39,8 +41,7 @@ pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo>
             serde_json::from_str(&data).with_context(|| "deserializing cached tx")?;
         tracing::info!("Loaded tx {} from cache", canonical_hash);
         if path != cache_path.as_str() {
-            std::fs::create_dir_all("cache").ok();
-            let _ = std::fs::write(&cache_path, data);
+            let _ = write_atomic(&cache_path, &data);
         }
         return Ok(info);
     }
@@ -99,10 +100,7 @@ pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo>
         block_basefee: block.header.base_fee_per_gas.unwrap_or(0) as u128,
     };
 
-    // Save to cache
-    std::fs::create_dir_all("cache").ok();
     let json = serde_json::to_string_pretty(&info)?;
-    std::fs::write(&cache_path, json).with_context(|| format!("writing cache {}", cache_path))?;
-
+    write_atomic(&cache_path, &json).with_context(|| format!("writing cache {}", cache_path))?;
     Ok(info)
 }

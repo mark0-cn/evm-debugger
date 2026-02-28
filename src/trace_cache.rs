@@ -2,6 +2,8 @@ use crate::types::{ExecutionResultInfo, StepSnapshot};
 use anyhow::{Context, Result};
 use std::path::Path;
 
+use crate::fs_utils::write_atomic;
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct TraceCacheFile {
     pub snapshots: Vec<StepSnapshot>,
@@ -12,7 +14,11 @@ pub fn trace_cache_path(tx_hash: &str, chain_id: Option<u64>, block_number: u64)
     let chain = chain_id
         .map(|v| v.to_string())
         .unwrap_or_else(|| "unknown".to_string());
-    let hash = tx_hash.trim().trim_start_matches("0x");
+    let trimmed = tx_hash.trim();
+    let hash = trimmed
+        .strip_prefix("0x")
+        .or_else(|| trimmed.strip_prefix("0X"))
+        .unwrap_or(trimmed);
     format!("cache/trace_{}_{}_{}.json", chain, block_number, hash)
 }
 
@@ -26,15 +32,16 @@ pub fn load_trace_cache(path: &str) -> Result<Option<TraceCacheFile>> {
     Ok(Some(file))
 }
 
-pub fn save_trace_cache(path: &str, snapshots: &[StepSnapshot], result: &Option<ExecutionResultInfo>) -> Result<()> {
-    std::fs::create_dir_all("cache").ok();
-    #[derive(serde::Serialize)]
-    struct TraceCacheRef<'a> {
-        snapshots: &'a [StepSnapshot],
-        result: &'a Option<ExecutionResultInfo>,
-    }
-    let json = serde_json::to_string_pretty(&TraceCacheRef { snapshots, result })
-        .with_context(|| "serializing trace cache")?;
-    std::fs::write(path, json).with_context(|| format!("writing {}", path))?;
+pub fn save_trace_cache(
+    path: &str,
+    snapshots: &[StepSnapshot],
+    result: &Option<ExecutionResultInfo>,
+) -> Result<()> {
+    let file = TraceCacheFile {
+        snapshots: snapshots.to_vec(),
+        result: result.clone(),
+    };
+    let json = serde_json::to_string_pretty(&file).with_context(|| "serializing trace cache")?;
+    write_atomic(path, &json).with_context(|| format!("writing {}", path))?;
     Ok(())
 }
