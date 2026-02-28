@@ -3,14 +3,22 @@ mod fetcher;
 mod inspector;
 mod server;
 mod session;
+mod trace_cache;
 mod types;
 
+use dashmap::DashMap;
 use server::{router, AppState, SessionMap};
 use std::sync::Arc;
-use dashmap::DashMap;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    std::env::set_var("https_proxy", "http://127.0.0.1:7890");
+    std::env::set_var("http_proxy", "http://127.0.0.1:7890");
+    std::env::set_var("all_proxy", "socks5://127.0.0.1:7890");
+    std::env::set_var("HTTPS_PROXY", "http://127.0.0.1:7890");
+    std::env::set_var("HTTP_PROXY", "http://127.0.0.1:7890");
+    std::env::set_var("ALL_PROXY", "socks5://127.0.0.1:7890");
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

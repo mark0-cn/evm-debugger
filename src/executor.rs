@@ -35,7 +35,10 @@ pub fn spawn_evm_thread(
         {
             Ok(rt) => rt,
             Err(e) => {
-                let _ = snap_tx.send(ChannelMessage::Error(format!("Failed to build runtime: {}", e)));
+                let _ = snap_tx.send(ChannelMessage::Error(format!(
+                    "Failed to build runtime: {}",
+                    e
+                )));
                 return;
             }
         };
@@ -57,7 +60,10 @@ pub fn spawn_evm_thread(
                 ProviderBuilder::new().connect_client(rpc_client)
             }
             Err(_) => {
-                let _ = snap_tx.send(ChannelMessage::Error(format!("Invalid RPC URL: {}", rpc_url)));
+                let _ = snap_tx.send(ChannelMessage::Error(format!(
+                    "Invalid RPC URL: {}",
+                    rpc_url
+                )));
                 return;
             }
         };
@@ -79,9 +85,10 @@ pub fn spawn_evm_thread(
         let caller: alloy_primitives::Address = match tx_info.caller.parse() {
             Ok(a) => a,
             Err(_) => {
-                let _ = snap_tx.send(ChannelMessage::Error(
-                    format!("Invalid caller address: {}", tx_info.caller),
-                ));
+                let _ = snap_tx.send(ChannelMessage::Error(format!(
+                    "Invalid caller address: {}",
+                    tx_info.caller
+                )));
                 return;
             }
         };
@@ -90,7 +97,8 @@ pub fn spawn_evm_thread(
             match to.parse::<alloy_primitives::Address>() {
                 Ok(addr) => TxKind::Call(addr),
                 Err(_) => {
-                    let _ = snap_tx.send(ChannelMessage::Error(format!("Invalid to address: {}", to)));
+                    let _ =
+                        snap_tx.send(ChannelMessage::Error(format!("Invalid to address: {}", to)));
                     return;
                 }
             }
@@ -177,17 +185,24 @@ pub fn spawn_evm_thread(
                         format!("0x{}", hex::encode(output.data())),
                         format!("{:?}", reason),
                     ),
-                    ExecutionResult::Revert { gas_used, output, .. } => (
+                    ExecutionResult::Revert {
+                        gas_used, output, ..
+                    } => (
                         false,
                         gas_used,
                         format!("0x{}", hex::encode(output.as_ref())),
                         "Revert".to_string(),
                     ),
-                    ExecutionResult::Halt { gas_used, reason, .. } => {
-                        (false, gas_used, String::new(), format!("{:?}", reason))
-                    }
+                    ExecutionResult::Halt {
+                        gas_used, reason, ..
+                    } => (false, gas_used, String::new(), format!("{:?}", reason)),
                 };
-                Some(ExecutionResultInfo { success, gas_used, output, reason })
+                Some(ExecutionResultInfo {
+                    success,
+                    gas_used,
+                    output,
+                    reason,
+                })
             }
             Err(e) => {
                 // Execution-level error — still send whatever snapshots we got.

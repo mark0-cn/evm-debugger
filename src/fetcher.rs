@@ -9,21 +9,43 @@ use std::path::Path;
 
 /// Load transaction info: check cache first, then fetch from RPC.
 pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo> {
-    let cache_path = format!("cache/{}.json", tx_hash);
-    if Path::new(&cache_path).exists() {
-        let data = std::fs::read_to_string(&cache_path)
-            .with_context(|| format!("reading cache file {}", cache_path))?;
+    let raw = tx_hash.trim();
+    let normalized_input = if raw.starts_with("0x") || raw.starts_with("0X") {
+        raw.to_string()
+    } else {
+        format!("0x{}", raw)
+    };
+
+    let hash: alloy_primitives::B256 = normalized_input
+        .parse()
+        .with_context(|| format!("parsing tx hash: {}", tx_hash))?;
+    let canonical_hash = format!("{hash:#x}");
+
+    let cache_path = format!("cache/{}.json", canonical_hash);
+    let legacy_cache_path = format!("cache/{}.json", raw);
+
+    let read_path = if Path::new(&cache_path).exists() {
+        Some(cache_path.as_str())
+    } else if Path::new(&legacy_cache_path).exists() {
+        Some(legacy_cache_path.as_str())
+    } else {
+        None
+    };
+
+    if let Some(path) = read_path {
+        let data = std::fs::read_to_string(path)
+            .with_context(|| format!("reading cache file {}", path))?;
         let info: CachedTxInfo =
             serde_json::from_str(&data).with_context(|| "deserializing cached tx")?;
-        tracing::info!("Loaded tx {} from cache", tx_hash);
+        tracing::info!("Loaded tx {} from cache", canonical_hash);
+        if path != cache_path.as_str() {
+            std::fs::create_dir_all("cache").ok();
+            let _ = std::fs::write(&cache_path, data);
+        }
         return Ok(info);
     }
 
-    tracing::info!("Fetching tx {} from RPC {}", tx_hash, rpc_url);
-
-    let hash: alloy_primitives::B256 = tx_hash
-        .parse()
-        .with_context(|| format!("parsing tx hash: {}", tx_hash))?;
+    tracing::info!("Fetching tx {} from RPC", canonical_hash);
 
     let rpc_url_parsed: url::Url = rpc_url
         .parse()
@@ -41,8 +63,8 @@ pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo>
     let tx = provider
         .get_transaction_by_hash(hash)
         .await
-        .with_context(|| "fetching transaction")?
-        .ok_or_else(|| anyhow!("transaction not found: {}", tx_hash))?;
+        .with_context(|| format!("fetching transaction {}", canonical_hash))?
+        .ok_or_else(|| anyhow!("transaction not found: {}", canonical_hash))?;
 
     let block_number = tx
         .block_number
@@ -51,7 +73,7 @@ pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo>
     let block = provider
         .get_block_by_number(BlockNumberOrTag::Number(block_number))
         .await
-        .with_context(|| "fetching block")?
+        .with_context(|| format!("fetching block {}", block_number))?
         .ok_or_else(|| anyhow!("block {} not found", block_number))?;
 
     let inner = &tx.inner;
@@ -80,8 +102,7 @@ pub async fn fetch_tx_info(tx_hash: &str, rpc_url: &str) -> Result<CachedTxInfo>
     // Save to cache
     std::fs::create_dir_all("cache").ok();
     let json = serde_json::to_string_pretty(&info)?;
-    std::fs::write(&cache_path, json)
-        .with_context(|| format!("writing cache {}", cache_path))?;
+    std::fs::write(&cache_path, json).with_context(|| format!("writing cache {}", cache_path))?;
 
     Ok(info)
 }

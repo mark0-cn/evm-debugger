@@ -118,6 +118,7 @@
 
 <script>
 let currentSessionId = null;
+let loadInFlight = false;
 let allTraceSteps = []; // full opcode list from server [{step, pc, opcode, opcode_name}]
 
 function setStatus(msg) {
@@ -135,6 +136,8 @@ async function loadTx() {
   const rpcUrl = document.getElementById('rpcInput').value.trim();
   if (!txHash) { alert('Enter a transaction hash'); return; }
   if (!rpcUrl) { alert('Enter an RPC URL'); return; }
+  if (loadInFlight) return;
+  loadInFlight = true;
 
   setStatus('Loading (running full trace)...');
   setButtonsEnabled(false);
@@ -158,6 +161,8 @@ async function loadTx() {
     processState(data.state);
   } catch(e) {
     setStatus('Error: ' + e.message);
+  } finally {
+    loadInFlight = false;
   }
 }
 
@@ -348,16 +353,15 @@ async function sendCmd(cmd) {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('txInput')) {
+    e.preventDefault();
+    loadTx();
+    return;
+  }
   if (!currentSessionId) return;
   if (e.key === 'F11') { e.preventDefault(); stepInto(); }
   else if (e.key === 'F10') { e.preventDefault(); stepOver(); }
   else if (e.key === 'F5') { e.preventDefault(); continueExec(); }
-  else if (e.key === 'Enter' && document.activeElement === document.getElementById('txInput')) {
-    loadTx();
-  }
-});
-document.getElementById('txInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') loadTx();
 });
 </script>
 </body>

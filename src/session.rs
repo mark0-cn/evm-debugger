@@ -34,6 +34,31 @@ impl DebugSession {
         })
     }
 
+    pub fn from_cache(
+        snapshots: Vec<StepSnapshot>,
+        result: Option<ExecutionResultInfo>,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            data: Arc::new(Mutex::new(SessionData::Ready {
+                snapshots,
+                current_index: 0,
+                result,
+            })),
+            snap_rx: Mutex::new(None),
+            abort_flag: Arc::new(AtomicBool::new(false)),
+        })
+    }
+
+    pub fn snapshots_for_cache(&self) -> Option<(Vec<StepSnapshot>, Option<ExecutionResultInfo>)> {
+        let data = self.data.lock().unwrap();
+        match &*data {
+            SessionData::Ready {
+                snapshots, result, ..
+            } => Some((snapshots.clone(), result.clone())),
+            _ => None,
+        }
+    }
+
     /// Block until the EVM thread sends all snapshots (called once, from spawn_blocking).
     pub fn wait_for_snapshots(&self) -> SessionState {
         let rx = match self.snap_rx.lock().unwrap().take() {
@@ -48,9 +73,8 @@ impl DebugSession {
         let state = match rx.recv() {
             Ok(ChannelMessage::AllSnapshots { snapshots, result }) => {
                 if snapshots.is_empty() {
-                    // No EVM steps — execution was instant (precompile / simple transfer).
-                    let s = match result {
-                        Some(r) => SessionState::Finished { result: r },
+                    let s = match result.as_ref() {
+                        Some(r) => SessionState::Finished { result: r.clone() },
                         None => SessionState::Error {
                             message: "Execution produced no steps".to_string(),
                         },
@@ -58,7 +82,7 @@ impl DebugSession {
                     *self.data.lock().unwrap() = SessionData::Ready {
                         snapshots: vec![],
                         current_index: 0,
-                        result: None,
+                        result,
                     };
                     return s;
                 }
