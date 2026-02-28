@@ -14,6 +14,7 @@ use dashmap::DashMap;
 use server::router;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::Semaphore;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -33,7 +34,14 @@ async fn main() -> anyhow::Result<()> {
 
     let sessions: SessionMap = Arc::new(DashMap::new());
     tokio::spawn(session_gc_task(sessions.clone()));
-    let state = AppState { sessions };
+    let evm_concurrency = std::env::var("EVM_DEBUGGER_EVM_CONCURRENCY")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(2);
+    let state = AppState {
+        sessions,
+        evm_semaphore: Arc::new(Semaphore::new(evm_concurrency)),
+    };
 
     let app = router(state);
 

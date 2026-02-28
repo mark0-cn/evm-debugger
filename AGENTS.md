@@ -65,6 +65,7 @@ cache/
 - 会话：`EVM_DEBUGGER_SESSION_TTL_SECS` 控制会话空闲清理阈值（秒），默认 `1800`。
 - 缓存：`EVM_DEBUGGER_CACHE_TTL_SECS` 控制 `cache/` 清理阈值（秒），默认 `604800`（7 天）。
 - 快照：`EVM_DEBUGGER_MAX_MEMORY_BYTES` 控制每步 memory 采样上限（字节），默认 `4096`。
+- 并发：`EVM_DEBUGGER_EVM_CONCURRENCY` 控制同时执行回放的最大会话数，默认 `2`。
 
 ## HTTP API
 

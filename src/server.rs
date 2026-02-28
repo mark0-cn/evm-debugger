@@ -59,7 +59,7 @@ async fn create_session(
     State(state): State<AppState>,
     Json(req): Json<CreateSessionRequest>,
 ) -> impl IntoResponse {
-    let svc = SessionService::new(state.sessions.clone());
+    let svc = SessionService::new(state.sessions.clone(), state.evm_semaphore.clone());
     match svc.create_session(req).await {
         Ok(resp) => Json(resp).into_response(),
         Err(e) => {

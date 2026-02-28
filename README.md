@@ -49,6 +49,10 @@ http://localhost:8080
 
 - `EVM_DEBUGGER_CACHE_TTL_SECS` 控制 `cache/` 清理阈值（秒），默认 7 天。
 
+并发限制：
+
+- `EVM_DEBUGGER_EVM_CONCURRENCY` 控制同时执行回放的最大会话数，默认 2。
+
 ## 代理（可选）
 
 如果你的环境需要代理访问外网 RPC，可在运行前设置环境变量：

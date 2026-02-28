@@ -8,14 +8,19 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use std::sync::{atomic::AtomicBool, Arc};
+use tokio::sync::Semaphore;
 
 pub struct SessionService {
     sessions: SessionMap,
+    evm_semaphore: Arc<Semaphore>,
 }
 
 impl SessionService {
-    pub fn new(sessions: SessionMap) -> Self {
-        Self { sessions }
+    pub fn new(sessions: SessionMap, evm_semaphore: Arc<Semaphore>) -> Self {
+        Self {
+            sessions,
+            evm_semaphore,
+        }
     }
 
     pub async fn create_session(&self, req: CreateSessionRequest) -> Result<CreateSessionResponse> {
@@ -40,16 +45,20 @@ impl SessionService {
         let session = DebugSession::new(snap_rx, abort_flag.clone());
         self.sessions.insert(session_id.clone(), session.clone());
 
-        let runtime = tokio::runtime::Handle::current();
-        spawn_evm_thread(tx_info, req.rpc_url, snap_tx, abort_flag, runtime);
-
-        let session_for_wait = session.clone();
-        let trace_path_for_wait = trace_path.clone();
-        std::thread::spawn(move || {
-            let _ = session_for_wait.wait_for_snapshots();
-            if let Some((snapshots, result)) = session_for_wait.snapshots_for_cache() {
-                let _ = save_trace_cache(&trace_path_for_wait, &snapshots, &result);
-            }
+        let session_for_bg = session.clone();
+        let trace_path_for_bg = trace_path.clone();
+        let sem = self.evm_semaphore.clone();
+        tokio::spawn(async move {
+            let _permit = sem.acquire_owned().await.ok();
+            let runtime = tokio::runtime::Handle::current();
+            spawn_evm_thread(tx_info, req.rpc_url, snap_tx, abort_flag, runtime);
+            let _ = tokio::task::spawn_blocking(move || {
+                let _ = session_for_bg.wait_for_snapshots();
+                if let Some((snapshots, result)) = session_for_bg.snapshots_for_cache() {
+                    let _ = save_trace_cache(&trace_path_for_bg, &snapshots, &result);
+                }
+            })
+            .await;
         });
 
         Ok(CreateSessionResponse {
