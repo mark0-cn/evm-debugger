@@ -3,14 +3,23 @@ use axum::{
     extract::{Path, Request, State},
     http::StatusCode,
     http::{header::CONTENT_TYPE, HeaderValue, Method},
+    response::Html,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use dioxus_liveview::LiveviewRouter;
+use dioxus::prelude::VirtualDom;
+use dioxus_liveview::{interpreter_glue, LiveviewRouter};
 use serde_json::json;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
+
+async fn liveview_index() -> Html<String> {
+    let glue = interpreter_glue("/ws");
+    Html(format!(
+        r#"<!DOCTYPE html><html><head><title>EVM Debugger</title></head><body><div id="main"></div>{glue}</body></html>"#
+    ))
+}
 
 fn format_anyhow_chain(e: &anyhow::Error) -> String {
     let mut msg = e.to_string();
@@ -23,7 +32,12 @@ fn format_anyhow_chain(e: &anyhow::Error) -> String {
 
 pub fn router(state: AppState) -> Router {
     let cors = cors_layer();
+    let ui_ctx = crate::ui::UiContext {
+        sessions: state.sessions.clone(),
+        evm_semaphore: state.evm_semaphore.clone(),
+    };
     Router::new()
+        .route("/", get(liveview_index))
         .route("/api/session", post(create_session))
         .route("/api/session/:id", get(get_session))
         .route("/api/session/:id/trace_steps", get(get_trace_steps))
@@ -35,7 +49,9 @@ pub fn router(state: AppState) -> Router {
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
-        .with_app("/", crate::ui::app)
+        .with_virtual_dom("/", move || {
+            VirtualDom::new(crate::ui::app).with_root_context(ui_ctx.clone())
+        })
 }
 
 fn cors_layer() -> CorsLayer {
