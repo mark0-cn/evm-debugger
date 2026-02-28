@@ -25,7 +25,7 @@ url              = "2"
 
 # HTTP
 axum             = { version = "0.7", features = ["json"] }
-tower-http       = { version = "0.5", features = ["cors", "trace"] }
+tower-http       = { version = "0.5", features = ["cors", "trace", "fs"] }
 tokio            = { version = "1", features = ["full"] }
 
 # Utilities

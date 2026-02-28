@@ -9,6 +9,7 @@ use axum::{
 };
 use serde_json::json;
 use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 
 fn format_anyhow_chain(e: &anyhow::Error) -> String {
@@ -22,9 +23,13 @@ fn format_anyhow_chain(e: &anyhow::Error) -> String {
 
 pub fn router(state: AppState) -> Router {
     let cors = cors_layer();
+    let dist_dir =
+        std::env::var("EVM_DEBUGGER_APP_DIST_DIR").unwrap_or_else(|_| "ui/dist".to_string());
 
     Router::new()
         .route("/", get(serve_index))
+        .route_service("/app", ServeFile::new(format!("{}/index.html", dist_dir)))
+        .nest_service("/assets", ServeDir::new(format!("{}/assets", dist_dir)))
         .route("/api/session", post(create_session))
         .route("/api/session/:id", get(get_session))
         .route("/api/session/:id/trace_steps", get(get_trace_steps))
