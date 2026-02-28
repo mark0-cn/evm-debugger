@@ -29,6 +29,12 @@ cargo run
 http://localhost:8080
 ```
 
+桌面模式（本地窗口打开同一个 HTTP 服务）：
+
+```bash
+cargo run --bin desktop
+```
+
 默认仅监听 `127.0.0.1:8080`。如需对外提供服务可设置：
 
 ```bash
@@ -91,6 +97,14 @@ all_proxy=socks5://127.0.0.1:7890
 | POST | `/api/session/:id/continue` | 运行到结束（F5） |
 | POST | `/api/session/:id/abort` | 中止 |
 | GET  | `/` | 返回前端 HTML |
+
+## 前端迁移（Dioxus）
+
+- 当前页面：`/`
+- 新页面入口（占位）：`/app`
+- 静态资源目录：默认 `ui/dist`，可用 `EVM_DEBUGGER_APP_DIST_DIR` 覆写
+
+详见 [ui/README.md](./ui/README.md)。
 
 ## 安全注意事项
 
