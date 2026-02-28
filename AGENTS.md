@@ -28,15 +28,15 @@ cargo run --release
 ```
 src/
   main.rs       入口（tokio main），启动 HTTP 服务器
+  lib.rs        可复用启动入口（start_server/run_server）
   server.rs     axum 路由与 HTTP handlers
+  ui.rs         Dioxus LiveView 前端入口
   session.rs    DebugSession：管理已收集快照的导航（索引移动）
   executor.rs   启动 EVM OS 线程，执行交易并汇总快照
   inspector.rs  StepDebugInspector：收集每步快照（无暂停）
   fetcher.rs    从 RPC 获取交易信息，并写入 cache/<tx_hash>.json 缓存
   trace_cache.rs 执行快照缓存：cache/trace_<chain>_<block>_<hash>.json
   types.rs      共享数据结构（可序列化：ChannelMessage/SessionState/StepSnapshot/TraceStep 等）
-static/
-  index.html    单文件前端
 cache/
   <tx_hash>.json 交易缓存（自动创建）
 ```
@@ -63,8 +63,7 @@ cache/
 - 安全：不要在仓库中提交任何 RPC key / token；公开仓库建议使用无密钥 RPC 或在本地配置。
 - 网络：如需代理访问外网 RPC，可通过环境变量配置 `http_proxy/https_proxy/all_proxy`（大小写均可）。
 - 本地：启动时默认尝试读取当前目录 `.env`（若存在），方便本地放置代理/RPC 等环境变量（不要提交到仓库）。
-- 前端：`/` 为当前单文件前端；`/app` 预留给后续 Dioxus 前端；默认从 `ui/dist` 提供静态资源（可用 `EVM_DEBUGGER_APP_DIST_DIR` 覆写）。
-- 前端：设置 `EVM_DEBUGGER_SERVE_APP_AT_ROOT=1` 后，`/` 将优先返回 `ui/dist/index.html`（读取失败则回退旧页面）。
+- 前端：`/` 为 Dioxus LiveView 前端，WebSocket 路径为 `/ws`。
 - 监听：默认仅绑定 `127.0.0.1:8080`；可用 `EVM_DEBUGGER_BIND_ADDR` 修改（例如 `0.0.0.0:8080`）。
 - CORS：默认仅允许 `http://localhost:8080,http://127.0.0.1:8080`；可用 `EVM_DEBUGGER_CORS_ALLOW_ORIGINS`（逗号分隔）修改。
 - RPC：默认拒绝 `localhost`/私网 IP 作为 `rpc_url`；可用 `EVM_DEBUGGER_RPC_ALLOWLIST`（逗号分隔，host 或 host:port）启用 allowlist 模式。

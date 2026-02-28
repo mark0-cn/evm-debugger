@@ -2,20 +2,13 @@
 
 目标：
 
-- 保留现有 `/`（`static/index.html`）
-- 新增 `/app` 作为新前端入口（WASM），并逐步替换旧页面
+- 前端使用 Dioxus 实现，并逐步完善功能
 - 浏览器版与桌面版都通过同一套 HTTP API 交互
 
-后端静态资源规则：
+当前实现：
 
-- `/app`：返回 `ui/dist/index.html`
-- `/assets/*`：映射到 `ui/dist/assets/*`
-- 可通过 `EVM_DEBUGGER_APP_DIST_DIR` 覆写默认目录 `ui/dist`
+- `/`：Dioxus LiveView（通过 WebSocket `/ws` 与后端通讯）
 
-建议的构建产物布局：
+后续可选演进：
 
-- `ui/dist/index.html`
-- `ui/dist/assets/*`（包含 wasm/js/css 等）
-
-当前仓库内的 `ui/dist` 仅为占位，后续由 Dioxus Web 构建产物替换即可。
-
+- 如果需要 WASM/静态部署模式，再补充 `ui/dist` 构建产物并由后端提供静态资源服务。
