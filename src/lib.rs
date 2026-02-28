@@ -25,6 +25,10 @@ pub struct ServerHandle {
 }
 
 impl ServerHandle {
+    pub fn abort(&self) {
+        self.join.abort();
+    }
+
     pub async fn wait(self) -> anyhow::Result<()> {
         self.join.await??;
         Ok(())

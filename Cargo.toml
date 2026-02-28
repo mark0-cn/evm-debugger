@@ -38,7 +38,8 @@ hex              = "0.4"
 tracing          = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 dotenvy          = "0.15"
-webbrowser       = "1"
+tao              = "0.34"
+wry              = "0.52"
 
 [dev-dependencies]
 tower = "0.5"
