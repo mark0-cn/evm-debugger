@@ -32,28 +32,24 @@ pub fn spawn_evm_thread(
     std::thread::spawn(move || {
         let _guard = runtime.enter();
 
-        let provider = match crate::rpc_url::validate_rpc_url(&rpc_url) {
-            Ok(url) => {
-                // Wrap the HTTP transport with a retry-backoff layer so that
-                // transient 429 / 5xx responses from rate-limited public RPCs are
-                // automatically retried instead of failing immediately.
-                let rpc_client = ClientBuilder::default()
-                    .layer(RetryBackoffLayer::new(
-                        10,   // max retries on rate-limit errors
-                        1000, // initial backoff ms
-                        100,  // compute-units/sec (conservative for free endpoints)
-                    ))
-                    .http(url);
-                ProviderBuilder::new().connect_client(rpc_client)
-            }
-            Err(e) => {
-                let _ = snap_tx.send(ChannelMessage::Error(format!(
-                    "Invalid RPC URL: {}; {}",
-                    rpc_url, e
-                )));
-                return;
-            }
-        };
+        let url_res = crate::rpc_url::validate_rpc_url(&rpc_url);
+        if let Err(e) = &url_res {
+            let _ = snap_tx.send(ChannelMessage::Error(format!(
+                "Invalid RPC URL: {}; {}",
+                rpc_url, e
+            )));
+            return;
+        }
+        let url = url_res.unwrap();
+
+        let rpc_client = ClientBuilder::default()
+            .layer(RetryBackoffLayer::new(
+                10,   // max retries on rate-limit errors
+                1000, // initial backoff ms
+                100,  // compute-units/sec (conservative for free endpoints)
+            ))
+            .http(url);
+        let provider = ProviderBuilder::new().connect_client(rpc_client);
 
         let prev_block_id: BlockId = (tx_info.block_number.saturating_sub(1)).into();
         let alloy_db = AlloyDB::new(provider, prev_block_id);
@@ -69,26 +65,22 @@ pub fn spawn_evm_thread(
         };
         let cache_db = CacheDB::new(wrapped);
 
-        let caller: alloy_primitives::Address = match tx_info.caller.parse() {
-            Ok(a) => a,
-            Err(_) => {
-                let _ = snap_tx.send(ChannelMessage::Error(format!(
-                    "Invalid caller address: {}",
-                    tx_info.caller
-                )));
-                return;
-            }
+        let caller_res = tx_info.caller.parse::<alloy_primitives::Address>();
+        let Ok(caller) = caller_res else {
+            let _ = snap_tx.send(ChannelMessage::Error(format!(
+                "Invalid caller address: {}",
+                tx_info.caller
+            )));
+            return;
         };
 
         let kind = if let Some(to) = &tx_info.to {
-            match to.parse::<alloy_primitives::Address>() {
-                Ok(addr) => TxKind::Call(addr),
-                Err(_) => {
-                    let _ =
-                        snap_tx.send(ChannelMessage::Error(format!("Invalid to address: {}", to)));
-                    return;
-                }
-            }
+            let addr_res = to.parse::<alloy_primitives::Address>();
+            let Ok(addr) = addr_res else {
+                let _ = snap_tx.send(ChannelMessage::Error(format!("Invalid to address: {}", to)));
+                return;
+            };
+            TxKind::Call(addr)
         } else {
             TxKind::Create
         };
@@ -106,7 +98,7 @@ pub fn spawn_evm_thread(
                 .unwrap_or(U256::ZERO);
         let chain_id = tx_info.chain_id.unwrap_or(1);
 
-        let tx_env = match TxEnv::builder()
+        let tx_env_res = TxEnv::builder()
             .caller(caller)
             .gas_limit(tx_info.gas_limit)
             .gas_price(tx_info.gas_price)
@@ -116,14 +108,12 @@ pub fn spawn_evm_thread(
             .nonce(tx_info.nonce)
             .kind(kind)
             .chain_id(Some(chain_id))
-            .build()
-        {
-            Ok(tx) => tx,
-            Err(e) => {
-                let _ = snap_tx.send(ChannelMessage::Error(format!("TxEnv build error: {:?}", e)));
-                return;
-            }
-        };
+            .build();
+        if let Err(e) = &tx_env_res {
+            let _ = snap_tx.send(ChannelMessage::Error(format!("TxEnv build error: {:?}", e)));
+            return;
+        }
+        let tx_env = tx_env_res.unwrap();
 
         let ctx = Context::mainnet()
             .with_db(cache_db)

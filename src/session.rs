@@ -99,9 +99,10 @@ impl DebugSession {
             }
         };
 
-        let msg = match rx.recv() {
-            Ok(m) => m,
-            Err(_) => ChannelMessage::Error("EVM thread disconnected".to_string()),
+        let msg = if let Ok(m) = rx.recv() {
+            m
+        } else {
+            ChannelMessage::Error("EVM thread disconnected".to_string())
         };
 
         let mut data = self.data_lock();

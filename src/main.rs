@@ -101,13 +101,11 @@ fn cleanup_cache_dir(ttl_secs: u64) -> anyhow::Result<usize> {
         if !path.is_file() {
             continue;
         }
-        let meta = match entry.metadata() {
-            Ok(m) => m,
-            Err(_) => continue,
+        let Ok(meta) = entry.metadata() else {
+            continue;
         };
-        let modified = match meta.modified() {
-            Ok(m) => m,
-            Err(_) => continue,
+        let Ok(modified) = meta.modified() else {
+            continue;
         };
         let age = now.duration_since(modified).unwrap_or_default().as_secs();
         if age > ttl_secs && std::fs::remove_file(&path).is_ok() {
