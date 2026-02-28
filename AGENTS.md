@@ -33,6 +33,7 @@ src/
   executor.rs   启动 EVM OS 线程，执行交易并汇总快照
   inspector.rs  StepDebugInspector：收集每步快照（无暂停）
   fetcher.rs    从 RPC 获取交易信息，并写入 cache/<tx_hash>.json 缓存
+  trace_cache.rs 执行快照缓存：cache/trace_<chain>_<block>_<hash>.json
   types.rs      共享数据结构（可序列化：ChannelMessage/SessionState/StepSnapshot/TraceStep 等）
 static/
   index.html    单文件前端
@@ -49,6 +50,7 @@ cache/
 - 执行结束后，通过 `snap_tx` 一次性把所有快照与最终结果发回 HTTP 侧
 - HTTP 侧将快照存入 `DebugSession`，并提取轻量 `Vec<TraceStep>`（用于前端 opcode 列表）
 - 前端步进命令只触发服务端在 `Vec<StepSnapshot>` 中移动索引并返回对应快照，无需与 EVM 线程交互
+- 可选：首次回放结束后把完整快照落盘为 trace cache；再次加载同一交易可直接从本地快照恢复会话，跳过回放阶段的 RPC
 
 这意味着：
 
@@ -59,6 +61,7 @@ cache/
 
 - 日志：通过 `RUST_LOG` 控制（例如 `info`/`debug`），默认 `info`。
 - 安全：不要在仓库中提交任何 RPC key / token；公开仓库建议使用无密钥 RPC 或在本地配置。
+- 网络：如需代理访问外网 RPC，可通过环境变量配置 `http_proxy/https_proxy/all_proxy`（大小写均可）。
 
 ## HTTP API
 
@@ -94,7 +97,10 @@ cache/
 - 先保证接口一致性：路由、前端调用路径、返回结构统一，避免“实现了但没挂路由/前端没用”的漂移。
 - 业务逻辑与底层依赖解耦：RPC/provider 构造、重试策略、EVM 执行编排尽量抽为可替换模块，HTTP 层保持薄。
 - 快照数据量要可控：大交易会产生大量 steps，避免每步全量 clone 大结构；优先考虑增量事件或按需聚合的模型演进。
-- 变更策略：小步改动、可编译可回归，每一步本地提交前都询问是否需要提交；对外协作用 PR。
+- 变更策略：小步改动、可编译可回归。提交/推送前必须先确认目标分支与发布方式：
+  - 默认目标分支为远端 `main`。
+  - 默认走 PR；只有用户明确要求时才允许直接推送到 `main`。
+  - 每一步本地提交前都先询问是否需要提交。
 - 如果为了方便后续 agent 更改，可以直接修改本文件，补充新的功能需求与演进约定。
 
 ## 待实现功能
